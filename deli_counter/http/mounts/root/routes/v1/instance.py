@@ -1,0 +1,165 @@
+import uuid
+
+import cherrypy
+
+from deli_counter.http.mounts.root.routes.v1.validation_models.instances import RequestCreateInstance, \
+    ResponseInstance, ParamsInstance, ParamsListInstance
+from ingredients_db.models.images import Image, ImageVisibility, ImageState
+from ingredients_db.models.instance import Instance, InstanceState
+from ingredients_db.models.network import Network, NetworkState
+from ingredients_db.models.network_port import NetworkPort
+from ingredients_db.models.public_key import PublicKey
+from ingredients_http.request_methods import RequestMethods
+from ingredients_http.route import Route
+from ingredients_http.router import Router
+from ingredients_tasks.tasks.instance import create_instance, delete_instance
+from ingredients_tasks.tasks.tasks import create_task
+
+
+class InstanceRouter(Router):
+    def __init__(self):
+        super().__init__(uri_base='instances')
+
+    @Route(methods=[RequestMethods.POST])
+    @cherrypy.tools.model_in(cls=RequestCreateInstance)
+    @cherrypy.tools.model_out(cls=ResponseInstance)
+    def create(self):
+        request: RequestCreateInstance = cherrypy.request.model
+
+        # TODO: allow multiple instances to be created at once add -# to the name
+
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.name == request.name).first()
+
+            # TODO: do we care about unique names?
+            # if instance is not None:
+            #     raise cherrypy.HTTPError(409, 'An instance already exists with the requested name.')
+
+            image = session.query(Image).filter(Image.id == request.image_id).with_for_update().first()
+
+            if image is None:
+                raise cherrypy.HTTPError(404, "An image with the requested id does not exist.")
+
+            if image.state != ImageState.CREATED:
+                raise cherrypy.HTTPError(412, "The requested image is not in the '%s' state" % (
+                    ImageState.CREATED.value))
+
+            if image.project_id != project.id:
+                if image.visibility == ImageVisibility.PRIVATE:
+                    raise cherrypy.HTTPError(400, "The requested image does not belong to the scoped project.")
+                elif image.visibility == ImageVisibility.SHARED:
+                    if project not in image.members:
+                        raise cherrypy.HTTPError(400, "The requested image is not shared with the scoped project.")
+                elif image.visibility == ImageVisibility.PUBLIC:
+                    # Image is public so don't error
+                    pass
+
+            network = session.query(Network).filter(Network.id == request.network_id).with_for_update().first()
+
+            if network is None:
+                raise cherrypy.HTTPError(404, "A network with the requested id does not exist.")
+
+            if network.state != NetworkState.CREATED:
+                raise cherrypy.HTTPError(412, "The requested network is not in the '%s' state" % (
+                    NetworkState.CREATED.value))
+
+            network_port = NetworkPort()
+            network_port.network_id = network.id
+            session.add(network_port)
+            session.flush()
+
+            instance = Instance()
+            instance.name = request.name
+            instance.image_id = image.id
+            instance.project_id = project.id
+            instance.network_port_id = network_port.id
+            instance.tags = request.tags
+            session.add(instance)
+            session.flush()
+
+            for public_key_id in request.public_keys:
+                public_key = session.query(PublicKey).filter(PublicKey.id == public_key_id).filter(
+                    PublicKey.project_id == project.id).first()
+
+                if public_key is None:
+                    raise cherrypy.HTTPError(404,
+                                             "Could not find a public key within the scoped project with the id %s" %
+                                             public_key_id)
+
+                instance.public_keys.append(public_key)
+
+            create_task(session, instance, create_instance, instance_id=instance.id)
+
+            response = ResponseInstance.from_database(instance)
+            session.commit()
+
+            return response
+
+    @Route(route='{instance_id}')
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.model_out(cls=ResponseInstance)
+    def get(self, instance_id: uuid.UUID):
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.id == instance_id).filter(
+                Instance.project_id == project.id).first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            return ResponseInstance.from_database(instance)
+
+    @Route()
+    @cherrypy.tools.model_params(cls=ParamsListInstance)
+    @cherrypy.tools.model_out_pagination(cls=ResponseInstance)
+    def list(self, image_id: uuid.UUID, limit: int, marker: uuid.UUID):
+        resp_instances = []
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instances = session.query(Instance).filter(Instance.project_id == project.id).order_by(
+                Instance.created_at.desc())
+
+            if marker is not None:
+                marker = session.query(Instance).filter(Instance.id == marker).first()
+                if marker is None:
+                    raise cherrypy.HTTPError(status=400, message="Unknown marker ID")
+                instances = instances.filter(Instance.created_at < marker.created_at)
+
+            if image_id is not None:
+                instances = instances.filter(Instance.image_id == image_id)
+
+            instances = instances.limit(limit + 1)
+
+            for instance in instances:
+                resp_instances.append(ResponseInstance.from_database(instance))
+
+        more_pages = False
+        if len(resp_instances) > limit:
+            more_pages = True
+            del resp_instances[-1]  # Remove the last item to reset back to original limit
+
+        return resp_instances, more_pages
+
+    @Route(route='{instance_id}', methods=[RequestMethods.DELETE])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    def delete(self, instance_id: uuid.UUID):
+        cherrypy.response.status = 204
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).first()
+
+            if instance is not None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            instance.state = InstanceState.DELETING
+
+            create_task(session, instance, delete_instance, instance_id=instance.id)
+
+            session.commit()

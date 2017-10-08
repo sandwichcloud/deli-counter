@@ -1,0 +1,25 @@
+
+---
+version: "3"
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: docker/postgresql/Dockerfile
+    environment:
+      POSTGRES_USER: sandwich
+      POSTGRES_PASSWORD: hunter2
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: sandwich
+      RABBITMQ_DEFAULT_PASS: hunter2
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+volumes:
+  pgdata: {}
