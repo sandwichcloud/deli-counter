@@ -2,7 +2,7 @@ FROM python:3-alpine
 WORKDIR /usr/src/app
 
 COPY . .
-RUN apk -U add git && python setup.py sdist bdist_wheel
+RUN apk -U add git && python setup.py bdist_wheel
 
 FROM python:3-alpine
 WORKDIR /usr/src/app

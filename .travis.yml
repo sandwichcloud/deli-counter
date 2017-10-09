@@ -24,6 +24,7 @@ jobs:
       script: 'echo "Deploying to PyPi"'
       deploy:
         provider: pypi
+        distributions: bdist_wheel
         user: rmb938
         password:
           secure: VY5syLLjjsbACrYLT74dabtZK85zUf7+PtcToA0+ZJLnUPD1Qo/hc48D+z4D6TN+Bs9BYEkYpFKKn2Rq8jTJtNgmorMB1MtTtBelu7y9dDqNzDTzlOxnaEqJIVVOgFpsmMrErtIOZ2S9ULWn2O2H3iPEDhtsnmfFkldh4trw1StBZoCskj5T+U9Y1isl6qo/VIy6DO9koj2dXlNwzFbDErG3TuD64Ef0THY/+PzExZx1/a9nEzX71BZzv8yjYN50EQ2HB3MkBxB9AZkc1x6RofPvaxbbtuFGDAC92eaoJs9IrPLTMgEc6lr2WbX9ME+4brSzu5+AyCkMS3igHAWd8SGF3LISddlKADfi3xJEuh3ytJGcL6fxSsmO0pnl9uh9bNZZf90LDMBgJRR97BLPAErgJHAYoBjHXZlWcEsjET1DurDdMTnKNwehiRG1m/Ggggxx6E6TCulvjGsawz15bXkJxqC3P/Sv/MVvwUILJBnqGHNfK1AKg1XAEj6RxVDWkZ4xAT1dwgNJX7RZek2c/3coQfcXfjYY22ExLL5q8PTbFpfI04KNHgJBS/EvL9y16pYJpKBAD41dlDvNHZRS9sEBxKAd4Yi/dV/9yL4vQIseckj9WSQLT/EIAXGzQkCWe8V3h2vTj6oz4HyyJoT2YAMc3r6FBAkzf751No/wEYU=
