@@ -5,7 +5,7 @@ services:
   postgres:
     build:
       context: .
-      dockerfile: docker/postgresql/Dockerfile
+      dockerfile: compose/postgresql/Dockerfile
     environment:
       POSTGRES_USER: sandwich
       POSTGRES_PASSWORD: hunter2
