@@ -97,11 +97,6 @@ RABBITMQ_PASSWORD = os.environ['RABBITMQ_PASSWORD']
 # Auth             #
 ####################
 
-# Github: deli_counter.auth.drivers.github.drivers:GithubAuthDriver
-# Gitlab: deli_counter.auth.drivers.gitlab.drivers:GitlabAuthDriver
-# OpenID: deli_counter.auth.drivers.openid.drivers:OpenIDAuthDriver
-# LDAP: deli_counter.auth_drivers.ldap.drivers:LDAPAuthDriver
-# Null: deli_counter.auth.drivers.null.drivers:NullAuthDriver - used for testing... you probably never want to use this
 AUTH_DRIVER = os.environ.get('AUTH_DRIVER')
 
 ####################
