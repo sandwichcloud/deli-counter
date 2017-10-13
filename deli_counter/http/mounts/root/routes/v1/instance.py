@@ -2,8 +2,9 @@ import uuid
 
 import cherrypy
 
+from deli_counter.http.mounts.root.routes.v1.validation_models.images import ResponseImage
 from deli_counter.http.mounts.root.routes.v1.validation_models.instances import RequestCreateInstance, \
-    ResponseInstance, ParamsInstance, ParamsListInstance
+    ResponseInstance, ParamsInstance, ParamsListInstance, RequestInstanceImage, RequestInstancePowerOffRestart
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
 from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
@@ -12,7 +13,9 @@ from ingredients_db.models.public_key import PublicKey
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
-from ingredients_tasks.tasks.instance import create_instance, delete_instance
+from ingredients_tasks.tasks.image import convert_vm
+from ingredients_tasks.tasks.instance import create_instance, delete_instance, stop_instance, start_instance, \
+    restart_instance
 from ingredients_tasks.tasks.tasks import create_task
 
 
@@ -148,18 +151,125 @@ class InstanceRouter(Router):
     @Route(route='{instance_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsInstance)
     def delete(self, instance_id: uuid.UUID):
-        cherrypy.response.status = 204
+        cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).first()
+                Instance.id == instance_id).with_for_update().first()
 
-            if instance is not None:
+            if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
 
             instance.state = InstanceState.DELETING
 
-            create_task(session, instance, delete_instance, instance_id=instance.id)
+            create_task(session, instance, delete_instance, instance_id=instance.id, delete_backing=True)
 
             session.commit()
+
+    @Route(route='{instance_id}/action/stop', methods=[RequestMethods.PUT])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
+    def action_stop(self, instance_id: uuid.UUID):
+        request: RequestInstancePowerOffRestart = cherrypy.request.model
+        cherrypy.response.status = 202
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).with_for_update().first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            instance.state = InstanceState.STOPPING
+
+            create_task(session, instance, stop_instance, instance_id=instance.id, hard=request.hard,
+                        timeout=request.timeout)
+
+            session.commit()
+
+    @Route(route='{instance_id}/action/start', methods=[RequestMethods.PUT])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    def action_start(self, instance_id: uuid.UUID):
+        cherrypy.response.status = 202
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).with_for_update().first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            if instance.state != InstanceState.STOPPED:
+                raise cherrypy.HTTPError(400,
+                                         "Can only start an instance in the following state: %s" % InstanceState.STOPPED.value)
+
+            instance.state = InstanceState.STARTING
+
+            create_task(session, instance, start_instance, instance_id=instance.id)
+
+            session.commit()
+
+    @Route(route='{instance_id}/action/restart', methods=[RequestMethods.PUT])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
+    def action_restart(self, instance_id: uuid.UUID):
+        request: RequestInstancePowerOffRestart = cherrypy.request.model
+        cherrypy.response.status = 202
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).with_for_update().first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            instance.state = InstanceState.STOPPING
+
+            create_task(session, instance, restart_instance, instance_id=instance.id, hard=request.hard,
+                        timeout=request.timeout)
+
+            session.commit()
+
+    @Route(route='{instance_id}/action/image', methods=[RequestMethods.POST])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.model_in(cls=RequestInstanceImage)
+    @cherrypy.tools.model_out(cls=ResponseImage)
+    def action_image(self, instance_id: uuid.UUID):
+        request: RequestInstanceImage = cherrypy.request.model
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).with_for_update().first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            if instance.state != InstanceState.STOPPED:
+                raise cherrypy.HTTPError(400,
+                                         "Can only image an instance in the following state: %s" % InstanceState.STOPPED.value)
+
+            instance.state = InstanceState.IMAGING
+
+            image = Image()
+            image.name = request.name
+            image.file_name = str(instance.id)
+            image.visibility = request.visibility
+            image.project_id = project.id
+
+            session.add(image)
+            session.flush()
+
+            # Delete vm without actually deleting the backing
+            create_task(session, instance, delete_instance, instance_id=instance.id, delete_backing=False)
+
+            # Convert the vm to a template
+            create_task(session, image, convert_vm, image_id=image.id, from_instance=True)
+
+            session.commit()
+
+            return ResponseImage.from_database(image)

@@ -101,7 +101,7 @@ class ImageRouter(Router):
     @Route(route='{image_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsImage)
     def delete(self, image_id):
-        cherrypy.response.status = 204
+        cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
             image = session.query(Image).filter(Image.id == image_id).filter(
