@@ -3,8 +3,8 @@ import importlib
 import cherrypy
 
 from deli_counter.auth.driver import AuthDriver
-from ingredients_db.models.project import Project, ProjectState
-from ingredients_db.models.user import UserToken
+from ingredients_db.models.project import Project
+from ingredients_db.models.user import UserToken, User
 from ingredients_http.app import HTTPApplication
 from ingredients_http.app_mount import ApplicationMount
 from ingredients_http.conf.loader import SETTINGS
@@ -16,7 +16,7 @@ from ingredients_tasks.celary import Messaging
 class RootMount(ApplicationMount):
     def __init__(self, app: HTTPApplication):
         super().__init__(app=app, mount_point='/')
-        self.auth_driver: AuthDriver = None
+        self.auth_drivers = []
         self.messaging = None
 
     def validate_token(self):
@@ -36,54 +36,51 @@ class RootMount(ApplicationMount):
                 raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
 
             # TODO: check project membership because they may no longer be a member since scoping
+            user = session.query(User).filter(User.id == token.user_id).first()
+            project = session.query(Project).filter(Project.id == token.project_id).first()
 
-            cherrypy.request.token_id = token.id
-            cherrypy.request.user_id = token.user_id
-            cherrypy.request.project_id = token.project_id
+            session.expunge(token)
+            session.expunge(user)
+            if project is not None:
+                session.expunge(project)
+            cherrypy.request.token = token
+            cherrypy.request.user = user
+            cherrypy.request.project = project
 
-    def get_token_project(self, session) -> Project:
-        if cherrypy.request.project_id is None:
+    def validate_project_scope(self):
+        if cherrypy.request.project is None:
             raise cherrypy.HTTPError(403, "Token not scoped for a project")
 
-        project = session.query(Project).filter(Project.id == cherrypy.request.project_id).first()
-
-        if project is None:
-            raise cherrypy.HTTPError(404, "Token scoped for invalid project.")
-
-        if project.state != ProjectState.CREATED:
-            raise cherrypy.HTTPError(412, "Project with the scoped id is not in the '%s' state" % (
-                ProjectState.CREATED.value))
-
-        return project
-
     def __setup_tools(self):
-        cherrypy.tools.authentication = cherrypy.Tool('on_start_resource', self.validate_token)
+        cherrypy.tools.authentication = cherrypy.Tool('on_start_resource', self.validate_token, priority=10)
+        cherrypy.tools.project_scope = cherrypy.Tool('on_start_resource', self.validate_project_scope, priority=20)
 
     def __setup_auth(self):
 
-        if SETTINGS.AUTH_DRIVER is None:
-            raise ValueError("AUTH_DRIVER not set.")
+        for driver_string in SETTINGS.AUTH_DRIVERS:
+            if ':' not in driver_string:
+                raise ValueError("AUTH_DRIVER does not contain a module and class. "
+                                 "Must be in the following format: 'my.module:MyClass'")
 
-        if ':' not in SETTINGS.AUTH_DRIVER:
-            raise ValueError(
-                "AUTH_DRIVER does not contain a module and class. Must be in the following format: 'my.module:MyClass'")
+            auth_module, auth_class, *_ = driver_string.split(":")
+            try:
+                auth_module = importlib.import_module(auth_module)
+            except ImportError:
+                self.logger.exception("Could not import auth driver's module: " + auth_module)
+                raise
+            try:
+                driver_klass = getattr(auth_module, auth_class)
+            except AttributeError:
+                self.logger.exception("Could not get driver's module class: " + auth_class)
+                raise
 
-        auth_module, auth_class, *_ = SETTINGS.AUTH_DRIVER.split(":")
-        try:
-            auth_module = importlib.import_module(auth_module)
-        except ImportError:
-            self.logger.exception("Could not import auth drivers module: " + auth_module)
-            raise
-        try:
-            driver_klass = getattr(auth_module, auth_class)
-        except AttributeError:
-            self.logger.exception("Could not get drivers module class: " + auth_class)
-            raise
+            if not issubclass(driver_klass, AuthDriver):
+                raise ValueError("AUTH_DRIVER class is not a subclass of '" + AuthDriver.__module__ + ".AuthDriver'")
 
-        if not issubclass(driver_klass, AuthDriver):
-            raise ValueError("AUTH_DRIVER class is not a subclass of '" + AuthDriver.__module__ + ".AuthDriver'")
+            self.auth_drivers.append(driver_klass())
 
-        self.auth_driver = driver_klass()
+        if len(self.auth_drivers) == 0:
+            raise ValueError("No auth drivers loaded")
 
     def __setup_messaging(self):
         self.messaging = Messaging(SETTINGS.RABBITMQ_HOST, SETTINGS.RABBITMQ_PORT, SETTINGS.RABBITMQ_USERNAME,

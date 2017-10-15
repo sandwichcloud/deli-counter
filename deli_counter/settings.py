@@ -97,7 +97,8 @@ RABBITMQ_PASSWORD = os.environ['RABBITMQ_PASSWORD']
 # Auth             #
 ####################
 
-AUTH_DRIVER = os.environ.get('AUTH_DRIVER')
+# TODO: default to db driver
+AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', None).split(",")
 
 ####################
 # GITHUB AUTH      #

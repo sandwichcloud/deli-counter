@@ -1,4 +1,4 @@
-from typing import Type, Dict
+from typing import Dict
 
 from deli_counter.auth.driver import AuthDriver
 from deli_counter.auth.drivers.github.router import GithubAuthRouter
@@ -9,8 +9,8 @@ class GithubAuthDriver(AuthDriver):
     def __init__(self):
         super().__init__('github')
 
-    def auth_router(self) -> Type[GithubAuthRouter]:
-        return GithubAuthRouter
+    def auth_router(self) -> GithubAuthRouter:
+        return GithubAuthRouter(self)
 
     def discover_options(self) -> Dict:
         return {}

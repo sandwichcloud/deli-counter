@@ -18,13 +18,14 @@ class ImageRouter(Router):
         super().__init__(uri_base='images')
 
     @Route(methods=[RequestMethods.POST])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_in(cls=RequestCreateImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
     def create(self):
         request: RequestCreateImage = cherrypy.request.model
 
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             image = session.query(Image).filter(Image.project_id == project.id).filter(
                 Image.name == request.name).first()
@@ -55,11 +56,12 @@ class ImageRouter(Router):
         return ResponseImage.from_database(image)
 
     @Route(route='{image_id}')
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
     def inspect(self, image_id):
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
             image = session.query(Image).filter(Image.id == image_id).filter(Image.project_id == project.id).first()
 
             if image is None:
@@ -68,12 +70,13 @@ class ImageRouter(Router):
         return ResponseImage.from_database(image)
 
     @Route()
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsListImage)
     @cherrypy.tools.model_out_pagination(cls=ResponseImage)
     def list(self, limit: int, marker: uuid.UUID):
         resp_images = []
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             images = session.query(Image).filter(
                 or_(Image.project_id == project.id,
@@ -99,11 +102,12 @@ class ImageRouter(Router):
         return resp_images, more_pages
 
     @Route(route='{image_id}', methods=[RequestMethods.DELETE])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
     def delete(self, image_id):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
             image = session.query(Image).filter(Image.id == image_id).filter(
                 Image.project_id == project.id).first()
 
@@ -125,11 +129,12 @@ class ImageRouter(Router):
             # TODO: add/remove members
 
     @Route(route='{image_id}/action/lock', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
     def action_lock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
             image = session.query(Image).filter(Image.id == image_id).filter(
                 Image.project_id == project.id).first()
 
@@ -143,11 +148,12 @@ class ImageRouter(Router):
             session.commit()
 
     @Route(route='{image_id}/action/unlock', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
     def action_unlock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
             image = session.query(Image).filter(Image.id == image_id).filter(
                 Image.project_id == project.id).first()
 

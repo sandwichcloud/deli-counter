@@ -1,6 +1,6 @@
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Type, Dict
+from typing import Dict
 
 from ingredients_http.router import Router
 
@@ -17,5 +17,5 @@ class AuthDriver(object):
         raise NotImplementedError
 
     @abstractmethod
-    def auth_router(self) -> Type[Router]:
+    def auth_router(self) -> Router:
         raise NotImplementedError

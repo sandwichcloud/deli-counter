@@ -26,6 +26,7 @@ class InstanceRouter(Router):
         super().__init__(uri_base='instances')
 
     @Route(methods=[RequestMethods.POST])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_in(cls=RequestCreateInstance)
     @cherrypy.tools.model_out(cls=ResponseInstance)
     def create(self):
@@ -34,7 +35,7 @@ class InstanceRouter(Router):
         # TODO: allow multiple instances to be created at once add -# to the name
 
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.name == request.name).first()
@@ -106,11 +107,12 @@ class InstanceRouter(Router):
             return response
 
     @Route(route='{instance_id}')
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_out(cls=ResponseInstance)
     def get(self, instance_id: uuid.UUID):
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.id == instance_id).filter(
                 Instance.project_id == project.id).first()
@@ -121,12 +123,13 @@ class InstanceRouter(Router):
             return ResponseInstance.from_database(instance)
 
     @Route()
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsListInstance)
     @cherrypy.tools.model_out_pagination(cls=ResponseInstance)
     def list(self, image_id: uuid.UUID, limit: int, marker: uuid.UUID):
         resp_instances = []
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instances = session.query(Instance).filter(Instance.project_id == project.id).order_by(
                 Instance.created_at.desc())
@@ -153,11 +156,12 @@ class InstanceRouter(Router):
         return resp_instances, more_pages
 
     @Route(route='{instance_id}', methods=[RequestMethods.DELETE])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     def delete(self, instance_id: uuid.UUID):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
@@ -176,13 +180,14 @@ class InstanceRouter(Router):
             session.commit()
 
     @Route(route='{instance_id}/action/stop', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
     def action_stop(self, instance_id: uuid.UUID):
         request: RequestInstancePowerOffRestart = cherrypy.request.model
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
@@ -206,11 +211,12 @@ class InstanceRouter(Router):
             session.commit()
 
     @Route(route='{instance_id}/action/start', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     def action_start(self, instance_id: uuid.UUID):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
@@ -238,13 +244,14 @@ class InstanceRouter(Router):
             session.commit()
 
     @Route(route='{instance_id}/action/restart', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
     def action_restart(self, instance_id: uuid.UUID):
         request: RequestInstancePowerOffRestart = cherrypy.request.model
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
@@ -268,13 +275,14 @@ class InstanceRouter(Router):
             session.commit()
 
     @Route(route='{instance_id}/action/image', methods=[RequestMethods.POST])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstanceImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
     def action_image(self, instance_id: uuid.UUID):
         request: RequestInstanceImage = cherrypy.request.model
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
@@ -311,6 +319,7 @@ class InstanceRouter(Router):
             return ResponseImage.from_database(image)
 
     @Route(route='{instance_id}/action/reset_state', methods=[RequestMethods.PUT])
+    @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstanceResetState)
     def action_reset_state(self, instance_id: uuid.UUID):
@@ -318,7 +327,7 @@ class InstanceRouter(Router):
         cherrypy.response.status = 204
         request: RequestInstanceResetState = cherrypy.request.model
         with cherrypy.request.db_session() as session:
-            project = self.mount.get_token_project(session)
+            project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.id == instance_id).first()
