@@ -310,12 +310,12 @@ class InstanceRouter(Router):
 
             return ResponseImage.from_database(image)
 
-    @Route(route='{instance_id}/action/reset_state', methods=[RequestMethods.POST])
+    @Route(route='{instance_id}/action/reset_state', methods=[RequestMethods.PUT])
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstanceResetState)
     def action_reset_state(self, instance_id: uuid.UUID):
         # TODO: admins only
-        cherrypy.response.status = 202
+        cherrypy.response.status = 204
         request: RequestInstanceResetState = cherrypy.request.model
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
@@ -331,8 +331,6 @@ class InstanceRouter(Router):
             if task.stopped_at is None:
                 raise cherrypy.HTTPError(409, "Current task for the instance has not finished, "
                                               "please wait for it to finish or cancel it.")
-
-            # TODO: revoke the task in the task api
 
             if request.active:
                 instance.state = InstanceState.ACTIVE
