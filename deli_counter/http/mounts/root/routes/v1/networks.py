@@ -16,6 +16,7 @@ from ingredients_tasks.tasks.tasks import create_task
 class NetworkRouter(Router):
     def __init__(self):
         super().__init__(uri_base='networks')
+        # TODO: default to admins only
 
     @Route(methods=[RequestMethods.POST])
     @cherrypy.tools.model_in(cls=RequestCreateNetwork)
@@ -58,7 +59,7 @@ class NetworkRouter(Router):
     @cherrypy.tools.model_out(cls=ResponseNetwork)
     def inspect(self, network_id):
         with cherrypy.request.db_session() as session:
-            network = session.query(Network).filter(Network.id == network_id).with_for_update().first()
+            network = session.query(Network).filter(Network.id == network_id).first()
 
             if network is None:
                 raise cherrypy.HTTPError(400, "A network with the requested id does not exist.")
@@ -96,13 +97,13 @@ class NetworkRouter(Router):
     def delete(self, network_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            network = session.query(Network).filter(Network.id == network_id).with_for_update().first()
+            network = session.query(Network).filter(Network.id == network_id).first()
 
             if network is None:
                 raise cherrypy.HTTPError(400, "A network with the requested id does not exist.")
 
             if network.state not in [NetworkState.CREATED, NetworkState.ERROR]:
-                raise cherrypy.HTTPError(412, "Can only delete a network while it is in the following states: %s" % (
+                raise cherrypy.HTTPError(409, "Can only delete a network while it is in the following states: %s" % (
                     [NetworkState.CREATED.value, NetworkState.ERROR.value]))
 
             ports = session.query(NetworkPort).filter(NetworkPort.network_id == network.id).with_for_update

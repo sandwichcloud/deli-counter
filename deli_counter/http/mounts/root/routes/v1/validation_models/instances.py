@@ -63,4 +63,8 @@ class RequestInstanceImage(Model):
 class RequestInstancePowerOffRestart(Model):
     hard = BooleanType(default=False)
     timeout = IntType(default=60, min_value=60,
-                      max_value=600)  # If your vm takes more than 10 minutes to power off you are doing something bad
+                      max_value=300)  # If your vm takes more than 5 minutes to power off you are doing something bad
+
+
+class RequestInstanceResetState(Model):
+    active = BooleanType(default=False)

@@ -17,6 +17,7 @@ class RootMount(ApplicationMount):
     def __init__(self, app: HTTPApplication):
         super().__init__(app=app, mount_point='/')
         self.auth_driver: AuthDriver = None
+        self.messaging = None
 
     def validate_token(self):
         authorization_header = cherrypy.request.headers.get('Authorization', None)
@@ -34,6 +35,8 @@ class RootMount(ApplicationMount):
             if token is None:
                 raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
 
+            # TODO: check project membership because they may no longer be a member since scoping
+
             cherrypy.request.token_id = token.id
             cherrypy.request.user_id = token.user_id
             cherrypy.request.project_id = token.project_id
@@ -42,7 +45,7 @@ class RootMount(ApplicationMount):
         if cherrypy.request.project_id is None:
             raise cherrypy.HTTPError(403, "Token not scoped for a project")
 
-        project = session.query(Project).filter(Project.id == cherrypy.request.project_id).with_for_update().first()
+        project = session.query(Project).filter(Project.id == cherrypy.request.project_id).first()
 
         if project is None:
             raise cherrypy.HTTPError(404, "Token scoped for invalid project.")
@@ -65,7 +68,7 @@ class RootMount(ApplicationMount):
             raise ValueError(
                 "AUTH_DRIVER does not contain a module and class. Must be in the following format: 'my.module:MyClass'")
 
-        auth_module, auth_class = SETTINGS.AUTH_DRIVER.split(":")
+        auth_module, auth_class, *_ = SETTINGS.AUTH_DRIVER.split(":")
         try:
             auth_module = importlib.import_module(auth_module)
         except ImportError:
@@ -83,9 +86,9 @@ class RootMount(ApplicationMount):
         self.auth_driver = driver_klass()
 
     def __setup_messaging(self):
-        messaging = Messaging(SETTINGS.RABBITMQ_HOST, SETTINGS.RABBITMQ_PORT, SETTINGS.RABBITMQ_USERNAME,
-                              SETTINGS.RABBITMQ_PASSWORD, SETTINGS.RABBITMQ_VHOST)
-        messaging.connect()
+        self.messaging = Messaging(SETTINGS.RABBITMQ_HOST, SETTINGS.RABBITMQ_PORT, SETTINGS.RABBITMQ_USERNAME,
+                                   SETTINGS.RABBITMQ_PASSWORD, SETTINGS.RABBITMQ_VHOST)
+        self.messaging.connect()
 
     def setup(self):
         self.__setup_tools()

@@ -49,6 +49,8 @@ class AuthRouter(Router):
             if project is None:
                 raise cherrypy.HTTPError(404, 'A project with the requested id does not exist.')
 
+            # TODO: check project membership
+
             user = session.query(User).filter(User.id == cherrypy.request.user_id).first()
 
             token = utils.generate_oauth_token(session, user.username)

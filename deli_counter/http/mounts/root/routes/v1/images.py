@@ -105,17 +105,17 @@ class ImageRouter(Router):
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
             image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).with_for_update().first()
+                Image.project_id == project.id).first()
 
             if image is None:
                 raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
 
             if image.state not in [ImageState.CREATED, ImageState.ERROR]:
-                raise cherrypy.HTTPError(412, "Can only delete an image while it is in the following states: %s" % (
+                raise cherrypy.HTTPError(409, "Can only delete an image while it is in the following states: %s" % (
                     [ImageState.CREATED.value, ImageState.ERROR.value]))
 
             if image.locked:
-                raise cherrypy.HTTPError(412, "Cannot delete an image while it is locked.")
+                raise cherrypy.HTTPError(409, "Cannot delete an image while it is locked.")
 
             image.state = ImageState.DELETING
             create_task(session, image, delete_image, image_id=image.id)
@@ -131,13 +131,13 @@ class ImageRouter(Router):
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
             image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).with_for_update().first()
+                Image.project_id == project.id).first()
 
             if image is None:
                 raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
 
             if image.locked:
-                raise cherrypy.HTTPError(412, "Can only lock unlocked images.")
+                raise cherrypy.HTTPError(409, "Can only lock unlocked images.")
 
             image.locked = True
             session.commit()
@@ -149,13 +149,13 @@ class ImageRouter(Router):
         with cherrypy.request.db_session() as session:
             project = self.mount.get_token_project(session)
             image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).with_for_update().first()
+                Image.project_id == project.id).first()
 
             if image is None:
                 raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
 
             if image.locked is False:
-                raise cherrypy.HTTPError(412, "Can only unlock locked images.")
+                raise cherrypy.HTTPError(409, "Can only unlock locked images.")
 
             image.locked = False
             session.commit()

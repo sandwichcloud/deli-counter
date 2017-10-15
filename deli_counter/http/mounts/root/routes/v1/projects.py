@@ -18,6 +18,7 @@ class ProjectRouter(Router):
     @cherrypy.tools.model_in(cls=RequestCreateProject)
     @cherrypy.tools.model_out(cls=ResponseProject)
     def create(self):
+        # TODO: default to admins only
         request: RequestCreateProject = cherrypy.request.model
 
         with cherrypy.request.db_session() as session:
@@ -53,13 +54,13 @@ class ProjectRouter(Router):
         cherrypy.response.status = 204
 
         with cherrypy.request.db_session() as session:
-            project = session.query(Project).filter(Project.id == project_id).with_for_update().first()
+            project = session.query(Project).filter(Project.id == project_id).first()
 
             if project is None:
                 raise cherrypy.HTTPError(404, 'A project with the requested id does not exist.')
 
             if project.state != ProjectState.CREATED:
-                raise cherrypy.HTTPError(412, "Project with the requested id is not in the '%s' state" % (
+                raise cherrypy.HTTPError(409, "Project with the requested id is not in the '%s' state" % (
                     ProjectState.CREATED.value))
 
             image_count = session.query(Image).filter(Image.project_id == project.id).count()

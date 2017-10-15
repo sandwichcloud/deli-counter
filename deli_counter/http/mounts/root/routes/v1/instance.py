@@ -4,12 +4,14 @@ import cherrypy
 
 from deli_counter.http.mounts.root.routes.v1.validation_models.images import ResponseImage
 from deli_counter.http.mounts.root.routes.v1.validation_models.instances import RequestCreateInstance, \
-    ResponseInstance, ParamsInstance, ParamsListInstance, RequestInstanceImage, RequestInstancePowerOffRestart
+    ResponseInstance, ParamsInstance, ParamsListInstance, RequestInstanceImage, RequestInstancePowerOffRestart, \
+    RequestInstanceResetState
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
 from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_db.models.network_port import NetworkPort
 from ingredients_db.models.public_key import PublicKey
+from ingredients_db.models.task import Task
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -41,7 +43,7 @@ class InstanceRouter(Router):
             # if instance is not None:
             #     raise cherrypy.HTTPError(409, 'An instance already exists with the requested name.')
 
-            image = session.query(Image).filter(Image.id == request.image_id).with_for_update().first()
+            image = session.query(Image).filter(Image.id == request.image_id).first()
 
             if image is None:
                 raise cherrypy.HTTPError(404, "An image with the requested id does not exist.")
@@ -60,7 +62,7 @@ class InstanceRouter(Router):
                     # Image is public so don't error
                     pass
 
-            network = session.query(Network).filter(Network.id == request.network_id).with_for_update().first()
+            network = session.query(Network).filter(Network.id == request.network_id).first()
 
             if network is None:
                 raise cherrypy.HTTPError(404, "A network with the requested id does not exist.")
@@ -69,6 +71,7 @@ class InstanceRouter(Router):
                 raise cherrypy.HTTPError(412, "The requested network is not in the '%s' state" % (
                     NetworkState.CREATED.value))
 
+            print("NETWORK PORT")
             network_port = NetworkPort()
             network_port.network_id = network.id
             session.add(network_port)
@@ -94,6 +97,7 @@ class InstanceRouter(Router):
 
                 instance.public_keys.append(public_key)
 
+            print("TASK")
             create_task(session, instance, create_instance, instance_id=instance.id)
 
             response = ResponseInstance.from_database(instance)
@@ -156,10 +160,14 @@ class InstanceRouter(Router):
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).with_for_update().first()
+                Instance.id == instance_id).first()
 
             if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            if instance.state not in [InstanceState.STOPPED, InstanceState.ACTIVE, InstanceState.ERROR]:
+                raise cherrypy.HTTPError(409, "Can only delete an instance in the following states: %s" % [
+                    InstanceState.STOPPED.value, InstanceState.ACTIVE.value, InstanceState.ERROR.value])
 
             instance.state = InstanceState.DELETING
 
@@ -177,10 +185,18 @@ class InstanceRouter(Router):
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).with_for_update().first()
+                Instance.id == instance_id).first()
 
             if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            if instance.state == InstanceState.ERROR:
+                raise cherrypy.HTTPError(409,
+                                         "Cannot stop an instance in the following state: %s" % instance.state.value)
+            elif instance.state != InstanceState.ACTIVE:
+                raise cherrypy.HTTPError(409,
+                                         "Can only stop an instance in the following state: %s" %
+                                         InstanceState.ACTIVE.value)
 
             instance.state = InstanceState.STOPPING
 
@@ -197,14 +213,23 @@ class InstanceRouter(Router):
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).with_for_update().first()
+                Instance.id == instance_id).first()
 
             if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
 
             if instance.state != InstanceState.STOPPED:
                 raise cherrypy.HTTPError(400,
-                                         "Can only start an instance in the following state: %s" % InstanceState.STOPPED.value)
+                                         "Can only start an instance in the following state: %s" %
+                                         InstanceState.STOPPED.value)
+
+            if instance.state == InstanceState.ERROR:
+                raise cherrypy.HTTPError(409,
+                                         "Cannot start an instance in the following state: %s" % instance.state.value)
+            elif instance.state != InstanceState.STOPPED:
+                raise cherrypy.HTTPError(409,
+                                         "Can only start an instance in the following state: %s" %
+                                         InstanceState.STOPPED.value)
 
             instance.state = InstanceState.STARTING
 
@@ -222,12 +247,20 @@ class InstanceRouter(Router):
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).with_for_update().first()
+                Instance.id == instance_id).first()
 
             if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
 
-            instance.state = InstanceState.STOPPING
+            if instance.state == InstanceState.ERROR:
+                raise cherrypy.HTTPError(409,
+                                         "Cannot restart an instance in the following state: %s" % instance.state.value)
+            elif instance.state != InstanceState.ACTIVE:
+                raise cherrypy.HTTPError(409,
+                                         "Can only restart an instance in the following state: %s" %
+                                         InstanceState.ACTIVE.value)
+
+            instance.state = InstanceState.RESTARTING
 
             create_task(session, instance, restart_instance, instance_id=instance.id, hard=request.hard,
                         timeout=request.timeout)
@@ -244,14 +277,17 @@ class InstanceRouter(Router):
             project = self.mount.get_token_project(session)
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
-                Instance.id == instance_id).with_for_update().first()
+                Instance.id == instance_id).first()
 
             if instance is None:
                 raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
 
-            if instance.state != InstanceState.STOPPED:
-                raise cherrypy.HTTPError(400,
-                                         "Can only image an instance in the following state: %s" % InstanceState.STOPPED.value)
+            if instance.state == InstanceState.ERROR:
+                raise cherrypy.HTTPError(409,
+                                         "Cannot image an instance in the following state: %s" % instance.state.value)
+            elif instance.state != InstanceState.STOPPED:
+                raise cherrypy.HTTPError(409, "Can only image an instance in the following state: %s" %
+                                         InstanceState.STOPPED.value)
 
             instance.state = InstanceState.IMAGING
 
@@ -273,3 +309,34 @@ class InstanceRouter(Router):
             session.commit()
 
             return ResponseImage.from_database(image)
+
+    @Route(route='{instance_id}/action/reset_state', methods=[RequestMethods.POST])
+    @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.model_in(cls=RequestInstanceResetState)
+    def action_reset_state(self, instance_id: uuid.UUID):
+        # TODO: admins only
+        cherrypy.response.status = 202
+        request: RequestInstanceResetState = cherrypy.request.model
+        with cherrypy.request.db_session() as session:
+            project = self.mount.get_token_project(session)
+
+            instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
+                Instance.id == instance_id).first()
+
+            if instance is None:
+                raise cherrypy.HTTPError(404, "An instance with the requested id does not exist in the scoped project.")
+
+            task = session.query(Task).filter(Task.id == instance.current_task_id).one()
+
+            if task.stopped_at is None:
+                raise cherrypy.HTTPError(409, "Current task for the instance has not finished, "
+                                              "please wait for it to finish or cancel it.")
+
+            # TODO: revoke the task in the task api
+
+            if request.active:
+                instance.state = InstanceState.ACTIVE
+            else:
+                instance.state = InstanceState.ERROR
+
+            session.commit()
