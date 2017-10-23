@@ -1,4 +1,5 @@
 from clify.command import Command
+from simple_settings import settings
 
 from deli_counter.cli.commands.database.current import CurrentCommand
 from deli_counter.cli.commands.database.downgrade import DowngradeCommand
@@ -6,7 +7,6 @@ from deli_counter.cli.commands.database.history import HistoryCommand
 from deli_counter.cli.commands.database.revision import RevisionCommand
 from deli_counter.cli.commands.database.upgrade import UpgradeCommand
 from ingredients_db.database import Database
-from ingredients_http.conf.loader import SETTINGS
 
 
 class DatabaseCommand(Command):
@@ -25,8 +25,8 @@ class DatabaseCommand(Command):
         RevisionCommand().register_subcommand(self)
 
     def setup(self, args):
-        self.database = Database(SETTINGS.DATABASE_HOST, SETTINGS.DATABASE_PORT, SETTINGS.DATABASE_USERNAME,
-                                 SETTINGS.DATABASE_PASSWORD, SETTINGS.DATABASE_DB, SETTINGS.DATABASE_POOL_SIZE,
+        self.database = Database(settings.DATABASE_HOST, settings.DATABASE_PORT, settings.DATABASE_USERNAME,
+                                 settings.DATABASE_PASSWORD, settings.DATABASE_DB, settings.DATABASE_POOL_SIZE,
                                  migration_scripts_location='ingredients_db:alembic')
         self.database.connect()
         return 0

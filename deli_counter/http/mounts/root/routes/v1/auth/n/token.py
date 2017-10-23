@@ -4,10 +4,10 @@ from ingredients_http.route import Route
 from ingredients_http.router import Router
 
 
-class AuthZRuleRouter(Router):
+class AuthNUserRouter(Router):
     def __init__(self):
-        super().__init__('rules')
+        super().__init__('users')
 
-    @Route('{rule_id}')
-    def get(self, rule_id: uuid.UUID):
+    @Route('{user_id}')
+    def get(self, user_id: uuid.UUID):
         pass

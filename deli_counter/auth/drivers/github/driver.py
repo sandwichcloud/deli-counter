@@ -1,8 +1,9 @@
 from typing import Dict
 
+from simple_settings import settings
+
 from deli_counter.auth.driver import AuthDriver
 from deli_counter.auth.drivers.github.router import GithubAuthRouter
-from ingredients_http.conf.loader import SETTINGS
 
 
 class GithubAuthDriver(AuthDriver):
@@ -17,7 +18,10 @@ class GithubAuthDriver(AuthDriver):
 
     def check_in_org(self, github_user) -> bool:
         for org in github_user.get_orgs():
-            if org.login == SETTINGS.GITHUB_ORG:
+            if org.login == settings.GITHUB_ORG:
                 return True
 
         return False
+
+    def has_role(self, username, role) -> bool:
+        return True

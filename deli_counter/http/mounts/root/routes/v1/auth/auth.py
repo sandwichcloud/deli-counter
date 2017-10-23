@@ -7,12 +7,12 @@ from ingredients_http.router import Router
 class AuthRouter(Router):
     def __init__(self):
         super().__init__()
-        self.drivers = []
+        self.drivers = {}
 
     def setup_routes(self, dispatcher: cherrypy.dispatch.RoutesDispatcher, uri_prefix: str):
-        self.drivers = self.mount.auth_drivers
+        self.drivers = self.mount.auth_manager.drivers
 
-        for driver in self.drivers:
+        for _, driver in self.drivers.items():
             driver_router: Router = driver.auth_router()
             driver_router.setup_routes(dispatcher, uri_prefix)
 
@@ -24,7 +24,7 @@ class AuthRouter(Router):
     def discover(self):
         data = {}
 
-        for driver in self.drivers:
+        for _, driver in self.drivers.items():
             data[driver.name] = driver.discover_options()
 
         return data

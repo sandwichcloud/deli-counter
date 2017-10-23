@@ -1,7 +1,7 @@
 from schematics import Model
 from schematics.types import UUIDType, StringType
 
-from ingredients_db.models.user import UserToken
+from ingredients_db.models.authn import AuthNToken
 from ingredients_http.schematics.types import ArrowType
 
 
@@ -23,7 +23,7 @@ class ResponseVerifyToken(Model):
     expires_at = ArrowType(required=True)
 
     @classmethod
-    def from_database(cls, token: UserToken):
+    def from_database(cls, token: AuthNToken):
         token_model = cls()
         token_model.id = token.id
         token_model.access_token = token.access_token
@@ -41,7 +41,7 @@ class ResponseOAuthToken(Model):
     expiry = ArrowType(required=True)
 
     @classmethod
-    def from_database(cls, token: UserToken):
+    def from_database(cls, token: AuthNToken):
         token_model = cls()
         token_model.access_token = token.access_token
         token_model.expiry = token.expires_at

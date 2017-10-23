@@ -4,12 +4,11 @@ import github.AuthenticatedUser
 import requests
 import requests.exceptions
 from github.GithubException import TwoFactorException, GithubException, BadCredentialsException
+from simple_settings import settings
 from sqlalchemy_utils.types.json import json
 
-from deli_counter.auth import utils
 from deli_counter.auth.validation_models.github import RequestGithubAuthorization, RequestGithubToken
 from deli_counter.http.mounts.root.routes.v1.validation_models.auth import ResponseOAuthToken
-from ingredients_http.conf.loader import SETTINGS
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -24,7 +23,7 @@ class GithubAuthRouter(Router):
     @cherrypy.config(**{'tools.authentication.on': False})
     @cherrypy.tools.model_in(cls=RequestGithubAuthorization)
     @cherrypy.tools.model_out(cls=ResponseOAuthToken)
-    def authorization(self):
+    def authorization(self):  # Used to get token via API (username and password Auth Flow)
         request: RequestGithubAuthorization = cherrypy.request.model
 
         user_github_client = github.Github(request.username, request.password)
@@ -34,8 +33,8 @@ class GithubAuthRouter(Router):
             authorization = github_user.create_authorization(
                 scopes=['user:email', 'read:org'],
                 note='Sandwich Cloud Authorization',
-                client_id=SETTINGS.GITHUB_CLIENT_ID,
-                client_secret=SETTINGS.GITHUB_CLIENT_SECRET,
+                client_id=settings.GITHUB_CLIENT_ID,
+                client_secret=settings.GITHUB_CLIENT_SECRET,
                 onetime_password=request.otp_code
             )
         except TwoFactorException:
@@ -51,10 +50,10 @@ class GithubAuthRouter(Router):
         token_github_client = github.Github(authorization.token)
         github_user = token_github_client.get_user()
         if self.driver.check_in_org(github_user) is False:
-            raise cherrypy.HTTPError(403, "User not a member of GitHub organization: '" + SETTINGS.GITHUB_ORG + "'")
+            raise cherrypy.HTTPError(403, "User not a member of GitHub organization: '" + settings.GITHUB_ORG + "'")
 
         with cherrypy.request.db_session() as session:
-            token = utils.generate_oauth_token(session, token_github_client.get_user().login)
+            token = self.driver.generate_user_token(session, github_user.login)
             session.commit()
             session.refresh(token)
 
@@ -64,19 +63,19 @@ class GithubAuthRouter(Router):
     @cherrypy.config(**{'tools.authentication.on': False})
     @cherrypy.tools.json_out()
     def token_options(self):
-        # This is required for EmberJS
+        # This is required for EmberJS for some reason?
         return {}
 
     @Route(route='token', methods=[RequestMethods.POST])
     @cherrypy.config(**{'tools.authentication.on': False})
     @cherrypy.tools.model_in(cls=RequestGithubToken)
     @cherrypy.tools.model_out(cls=ResponseOAuthToken)
-    def token(self):
+    def token(self):  # Used to get token via Web UI (Authorization Code Auth Flow)
         request: RequestGithubToken = cherrypy.request.model
 
         r = requests.post('https://github.com/login/oauth/access_token', json={
-            'client_id': SETTINGS.GITHUB_CLIENT_ID,
-            'client_secret': SETTINGS.GITHUB_CLIENT_SECRET,
+            'client_id': settings.GITHUB_CLIENT_ID,
+            'client_secret': settings.GITHUB_CLIENT_SECRET,
             'code': request.authorizationCode
         }, headers={'Accept': 'application/json'})
 
@@ -93,10 +92,10 @@ class GithubAuthRouter(Router):
         token_github_client = github.Github(access_token_data['access_token'])
         github_user = token_github_client.get_user()
         if self.driver.check_in_org(github_user) is False:
-            raise cherrypy.HTTPError(403, "User not a member of GitHub organization: '" + SETTINGS.GITHUB_ORG + "'")
+            raise cherrypy.HTTPError(403, "User not a member of GitHub organization: '" + settings.GITHUB_ORG + "'")
 
         with cherrypy.request.db_session() as session:
-            token = utils.generate_oauth_token(session, token_github_client.get_user().login)
+            token = self.driver.generate_user_token(session, github_user.login)
             session.commit()
             session.refresh(token)
 
