@@ -1,10 +1,8 @@
 import cherrypy
 
-from deli_counter.auth import utils
 from deli_counter.http.mounts.root.routes.v1.validation_models.auth import ResponseVerifyToken, RequestScopeToken, \
     ResponseOAuthToken
 from ingredients_db.models.project import Project
-from ingredients_db.models.user import UserToken, User
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -18,10 +16,7 @@ class AuthNTokenRouter(Router):
     @cherrypy.tools.model_out(cls=ResponseVerifyToken)
     def get(self):
         # TODO: allow getting another token with X-Subject-Token-ID header
-        with cherrypy.request.db_session() as session:
-            token = session.query(UserToken).filter(UserToken.id == cherrypy.request.token.id).first()
-
-        return ResponseVerifyToken.from_database(token)
+        return ResponseVerifyToken.from_database(cherrypy.request.token)
 
     @Route(methods=[RequestMethods.HEAD])
     def head(self):
@@ -42,9 +37,13 @@ class AuthNTokenRouter(Router):
 
             # TODO: check project membership
 
-            user = session.query(User).filter(User.id == cherrypy.request.user.id).first()
+            driver = self.mount.auth_manager.drivers.get(cherrypy.request.user.driver)
 
-            token = utils.generate_oauth_token(session, user.username)
+            if driver is None:
+                raise cherrypy.HTTPError(500, "Previous auth driver '%s' is not loaded. Cannot scope token."
+                                         % cherrypy.request.token.driver)
+
+            token = driver.generate_user_token(session, cherrypy.request.user.username)
             # Should project tokens last the same amount of time?
             token.project_id = project.id
             session.commit()

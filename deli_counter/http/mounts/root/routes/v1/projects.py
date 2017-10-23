@@ -5,6 +5,7 @@ import cherrypy
 from deli_counter.http.mounts.root.routes.v1.validation_models.projects import ParamsProject, RequestCreateProject, \
     ResponseProject, ParamsListProject
 from ingredients_db.models.images import Image
+from ingredients_db.models.instance import Instance
 from ingredients_db.models.project import Project, ProjectState
 from ingredients_http.route import Route, RequestMethods
 from ingredients_http.router import Router
@@ -17,6 +18,7 @@ class ProjectRouter(Router):
     @Route(methods=[RequestMethods.POST])
     @cherrypy.tools.model_in(cls=RequestCreateProject)
     @cherrypy.tools.model_out(cls=ResponseProject)
+    @cherrypy.tools.enforce_policy(policy_name="projects:create")
     def create(self):
         # TODO: default to admins only
         request: RequestCreateProject = cherrypy.request.model
@@ -39,44 +41,20 @@ class ProjectRouter(Router):
     @Route(route='{project_id}')
     @cherrypy.tools.model_params(cls=ParamsProject)
     @cherrypy.tools.model_out(cls=ResponseProject)
-    def get(self, project_id: uuid.UUID):
-        with cherrypy.request.db_session() as session:
-            project = session.query(Project).filter(Project.id == project_id).first()
-
-            if project is None:
-                raise cherrypy.HTTPError(404, 'A project with the requested id does not exist.')
-
-            return ResponseProject.from_database(project)
-
-    @Route(route='{project_id}', methods=[RequestMethods.DELETE])
-    @cherrypy.tools.model_params(cls=ParamsProject)
-    def delete(self, project_id: uuid.UUID):
-        cherrypy.response.status = 204
-
-        with cherrypy.request.db_session() as session:
-            project = session.query(Project).filter(Project.id == project_id).first()
-
-            if project is None:
-                raise cherrypy.HTTPError(404, 'A project with the requested id does not exist.')
-
-            if project.state != ProjectState.CREATED:
-                raise cherrypy.HTTPError(409, "Project with the requested id is not in the '%s' state" % (
-                    ProjectState.CREATED.value))
-
-            image_count = session.query(Image).filter(Image.project_id == project.id).count()
-            if image_count > 0:
-                raise cherrypy.HTTPError(412, 'Cannot delete a project with images.')
-            # TODO: check instance count
-
-            project.state = ProjectState.DELETED
-            session.delete(project)
-            session.commit()
+    @cherrypy.tools.resource_object(id_param="project_id", cls=Project)
+    @cherrypy.tools.enforce_policy(policy_name="projects:get")
+    def get(self, project_id):
+        return ResponseProject.from_database(cherrypy.request.resource_object)
 
     @Route()
     @cherrypy.tools.model_params(cls=ParamsListProject)
     @cherrypy.tools.model_out_pagination(cls=ResponseProject)
-    def list_projects(self, name: str, limit: int, marker: uuid.UUID):
+    @cherrypy.tools.enforce_policy(policy_name="projects:list")
+    def list(self, name: str, limit: int, marker: uuid.UUID):
         resp_projects = []
+
+        # TODO: only list projects that we are a member of
+        # optional param to list all
 
         with cherrypy.request.db_session() as session:
             projects = session.query(Project).order_by(Project.created_at.desc())
@@ -101,3 +79,31 @@ class ProjectRouter(Router):
             del resp_projects[-1]  # Remove the last item to reset back to original limit
 
         return resp_projects, more_pages
+
+    @Route(route='{project_id}', methods=[RequestMethods.DELETE])
+    @cherrypy.tools.model_params(cls=ParamsProject)
+    @cherrypy.tools.resource_object(id_param="project_id", cls=Project)
+    @cherrypy.tools.enforce_policy(policy_name="projects:delete")
+    def delete(self, project_id):
+        cherrypy.response.status = 204
+
+        with cherrypy.request.db_session() as session:
+            project: Project = cherrypy.request.resource_object
+            session.refresh(project)
+
+            if project.state != ProjectState.CREATED:
+                raise cherrypy.HTTPError(409, "Project with the requested id is not in the '%s' state" % (
+                    ProjectState.CREATED.value))
+
+            image_count = session.query(Image).filter(Image.project_id == project.id).count()
+            if image_count > 0:
+                raise cherrypy.HTTPError(412, 'Cannot delete a project with images.')
+            # TODO: check instance count
+
+            instance_count = session.query(Instance).filter(Instance.project_id == project.id).count()
+            if instance_count > 0:
+                raise cherrypy.HTTPError(412, "Cannot delete a project with instances.")
+
+            project.state = ProjectState.DELETED
+            session.delete(project)
+            session.commit()

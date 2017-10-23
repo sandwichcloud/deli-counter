@@ -21,8 +21,12 @@ class ImageRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_in(cls=RequestCreateImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
+    @cherrypy.tools.enforce_policy(policy_name="images:create")
     def create(self):
         request: RequestCreateImage = cherrypy.request.model
+
+        if request.visibility == ImageVisibility.PUBLIC:
+            self.mount.enforce_policy("images:create:public")
 
         with cherrypy.request.db_session() as session:
             project = cherrypy.request.project
@@ -59,20 +63,16 @@ class ImageRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
-    def inspect(self, image_id):
-        with cherrypy.request.db_session() as session:
-            project = cherrypy.request.project
-            image = session.query(Image).filter(Image.id == image_id).filter(Image.project_id == project.id).first()
-
-            if image is None:
-                raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
-
-        return ResponseImage.from_database(image)
+    @cherrypy.tools.resource_object(id_param="image_id", cls=Image)
+    @cherrypy.tools.enforce_policy(policy_name="images:get")
+    def get(self, image_id):
+        return ResponseImage.from_database(cherrypy.request.resource_object)
 
     @Route()
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsListImage)
     @cherrypy.tools.model_out_pagination(cls=ResponseImage)
+    @cherrypy.tools.enforce_policy(policy_name="images:list")
     def list(self, limit: int, marker: uuid.UUID):
         resp_images = []
         with cherrypy.request.db_session() as session:
@@ -104,15 +104,13 @@ class ImageRouter(Router):
     @Route(route='{image_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
+    @cherrypy.tools.resource_object(id_param="image_id", cls=Image)
+    @cherrypy.tools.enforce_policy(policy_name="images:delete")
     def delete(self, image_id):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            project = cherrypy.request.project
-            image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).first()
-
-            if image is None:
-                raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
+            image: Image = cherrypy.request.resource_object
+            session.refresh(image)
 
             if image.state not in [ImageState.CREATED, ImageState.ERROR]:
                 raise cherrypy.HTTPError(409, "Can only delete an image while it is in the following states: %s" % (
@@ -131,15 +129,13 @@ class ImageRouter(Router):
     @Route(route='{image_id}/action/lock', methods=[RequestMethods.PUT])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
+    @cherrypy.tools.resource_object(id_param="image_id", cls=Image)
+    @cherrypy.tools.enforce_policy(policy_name="images:action:lock")
     def action_lock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            project = cherrypy.request.project
-            image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).first()
-
-            if image is None:
-                raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
+            image: Image = cherrypy.request.resource_object
+            session.refresh(image)
 
             if image.locked:
                 raise cherrypy.HTTPError(409, "Can only lock unlocked images.")
@@ -150,15 +146,13 @@ class ImageRouter(Router):
     @Route(route='{image_id}/action/unlock', methods=[RequestMethods.PUT])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
+    @cherrypy.tools.resource_object(id_param="image_id", cls=Image)
+    @cherrypy.tools.enforce_policy(policy_name="images:action:unlock")
     def action_unlock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            project = cherrypy.request.project
-            image = session.query(Image).filter(Image.id == image_id).filter(
-                Image.project_id == project.id).first()
-
-            if image is None:
-                raise cherrypy.HTTPError(404, "An image with the requested id does not exist in the scoped project.")
+            image: Image = cherrypy.request.resource_object
+            session.refresh(image)
 
             if image.locked is False:
                 raise cherrypy.HTTPError(409, "Can only unlock locked images.")

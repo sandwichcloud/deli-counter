@@ -16,7 +16,7 @@ from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
 from ingredients_tasks.tasks.image import convert_vm
-from ingredients_tasks.tasks.instance import create_instance, delete_instance, stop_instance, start_instance, \
+from ingredients_tasks.tasks.instance import create_instance, delete_instance, start_instance, stop_instance, \
     restart_instance
 from ingredients_tasks.tasks.tasks import create_task
 
@@ -29,6 +29,7 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_in(cls=RequestCreateInstance)
     @cherrypy.tools.model_out(cls=ResponseInstance)
+    @cherrypy.tools.enforce_policy(policy_name="instances:create")
     def create(self):
         request: RequestCreateInstance = cherrypy.request.model
 
@@ -72,7 +73,6 @@ class InstanceRouter(Router):
                 raise cherrypy.HTTPError(412, "The requested network is not in the '%s' state" % (
                     NetworkState.CREATED.value))
 
-            print("NETWORK PORT")
             network_port = NetworkPort()
             network_port.network_id = network.id
             session.add(network_port)
@@ -110,6 +110,7 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_out(cls=ResponseInstance)
+    @cherrypy.tools.enforce_policy(policy_name="instances:get")
     def get(self, instance_id: uuid.UUID):
         with cherrypy.request.db_session() as session:
             project = cherrypy.request.project
@@ -126,6 +127,7 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsListInstance)
     @cherrypy.tools.model_out_pagination(cls=ResponseInstance)
+    @cherrypy.tools.enforce_policy(policy_name="instances:list")
     def list(self, image_id: uuid.UUID, limit: int, marker: uuid.UUID):
         resp_instances = []
         with cherrypy.request.db_session() as session:
@@ -158,6 +160,7 @@ class InstanceRouter(Router):
     @Route(route='{instance_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.enforce_policy(policy_name="instances:delete")
     def delete(self, instance_id: uuid.UUID):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
@@ -183,6 +186,7 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
+    @cherrypy.tools.enforce_policy(policy_name="instances:action:stop")
     def action_stop(self, instance_id: uuid.UUID):
         request: RequestInstancePowerOffRestart = cherrypy.request.model
         cherrypy.response.status = 202
@@ -213,6 +217,7 @@ class InstanceRouter(Router):
     @Route(route='{instance_id}/action/start', methods=[RequestMethods.PUT])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
+    @cherrypy.tools.enforce_policy(policy_name="instances:action:start")
     def action_start(self, instance_id: uuid.UUID):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
@@ -247,6 +252,7 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstancePowerOffRestart)
+    @cherrypy.tools.enforce_policy(policy_name="instances:action:restart")
     def action_restart(self, instance_id: uuid.UUID):
         request: RequestInstancePowerOffRestart = cherrypy.request.model
         cherrypy.response.status = 202
@@ -279,8 +285,13 @@ class InstanceRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstanceImage)
     @cherrypy.tools.model_out(cls=ResponseImage)
+    @cherrypy.tools.enforce_policy(policy_name="instances:action:image")
     def action_image(self, instance_id: uuid.UUID):
         request: RequestInstanceImage = cherrypy.request.model
+
+        if request.visibility == ImageVisibility.PUBLIC:
+            self.mount.enforce_policy("instances:action:image:public")
+
         with cherrypy.request.db_session() as session:
             project = cherrypy.request.project
 
@@ -322,8 +333,8 @@ class InstanceRouter(Router):
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsInstance)
     @cherrypy.tools.model_in(cls=RequestInstanceResetState)
+    @cherrypy.tools.enforce_policy(policy_name="instances:action:reset_state")
     def action_reset_state(self, instance_id: uuid.UUID):
-        # TODO: admins only
         cherrypy.response.status = 204
         request: RequestInstanceResetState = cherrypy.request.model
         with cherrypy.request.db_session() as session:
@@ -339,7 +350,7 @@ class InstanceRouter(Router):
 
             if task.stopped_at is None:
                 raise cherrypy.HTTPError(409, "Current task for the instance has not finished, "
-                                              "please wait for it to finish or cancel it.")
+                                              "please wait for it to finish.")
 
             if request.active:
                 instance.state = InstanceState.ACTIVE

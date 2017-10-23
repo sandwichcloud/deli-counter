@@ -21,6 +21,7 @@ class NetworkRouter(Router):
     @Route(methods=[RequestMethods.POST])
     @cherrypy.tools.model_in(cls=RequestCreateNetwork)
     @cherrypy.tools.model_out(cls=ResponseNetwork)
+    @cherrypy.tools.enforce_policy(policy_name="network:create")
     def create(self):
         request: RequestCreateNetwork = cherrypy.request.model
 
@@ -57,7 +58,8 @@ class NetworkRouter(Router):
     @Route(route='{network_id}')
     @cherrypy.tools.model_params(cls=ParamsNetwork)
     @cherrypy.tools.model_out(cls=ResponseNetwork)
-    def inspect(self, network_id):
+    @cherrypy.tools.enforce_policy(policy_name="network:get")
+    def get(self, network_id):
         with cherrypy.request.db_session() as session:
             network = session.query(Network).filter(Network.id == network_id).first()
 
@@ -69,6 +71,7 @@ class NetworkRouter(Router):
     @Route()
     @cherrypy.tools.model_params(cls=ParamsListNetwork)
     @cherrypy.tools.model_out_pagination(cls=ResponseNetwork)
+    @cherrypy.tools.enforce_policy(policy_name="network:list")
     def list(self, limit: int, marker: uuid.UUID):
         resp_networks = []
         with cherrypy.request.db_session() as session:
@@ -94,6 +97,7 @@ class NetworkRouter(Router):
 
     @Route(route='{network_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsNetwork)
+    @cherrypy.tools.enforce_policy(policy_name="network:delete")
     def delete(self, network_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:

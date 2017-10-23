@@ -9,8 +9,6 @@ load_dotenv(os.path.join(os.getcwd(), '.env'))
 # CORE             #
 ####################
 
-DEBUG = True if os.environ.get('PRODUCTION') is None else False
-
 LOGGING_LEVEL = logging.getLevelName(logging.INFO)
 LOGGING_CONFIG = {
     'version': 1,
@@ -52,6 +50,10 @@ LOGGING_CONFIG = {
             'handlers': ['console']
         },
         'celery': {
+            'level': LOGGING_LEVEL,
+            'handlers': ['console']
+        },
+        'oslo_policy': {
             'level': LOGGING_LEVEL,
             'handlers': ['console']
         }
@@ -108,6 +110,8 @@ GITHUB_URL = os.environ.get('GITHUB_URL', 'https://api.github.com')
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 GITHUB_ORG = os.environ.get('GITHUB_ORG')
+GITHUB_TEAM_ROLES = os.environ.get('GITHUB_TEAM_ROLES', 'admin:sandwich-admin').split(",")
+GITHUB_TEAM_ROLES_PREFIX = os.environ.get("GITHUB_TEAM_ROLES_PREFIX", "")
 
 ####################
 # GITLAB AUTH      #

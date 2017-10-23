@@ -1,7 +1,7 @@
 from clify.app import Application
 from pbr.version import VersionInfo
 
-from ingredients_http.conf.loader import SETTINGS
+from simple_settings import settings
 
 
 class DeliApplication(Application):
@@ -13,4 +13,4 @@ class DeliApplication(Application):
         return VersionInfo('deli-counter').semantic_version().release_string()
 
     def logging_config(self, log_level: int) -> dict:
-        return SETTINGS.LOGGING_CONFIG
+        return settings.LOGGING_CONFIG
