@@ -23,11 +23,7 @@ class AuthDriver(object):
     def auth_router(self) -> Router:
         raise NotImplementedError
 
-    @abstractmethod
-    def has_role(self, username, role) -> bool:
-        raise NotImplementedError
-
-    def generate_user_token(self, session, username):
+    def generate_user_token(self, session, username, roles):
         user = session.query(AuthNUser).filter(AuthNUser.username == username).filter(
             AuthNUser.driver == self.name).first()
         if user is None:
@@ -43,15 +39,12 @@ class AuthDriver(object):
         session.add(token)
         session.flush()
 
-        # Find all the roles this user has and add it to the token
-        # This may be slow when we have to check a lot of roles.
-        # Even with 100 roles it may be fine?
-        roles = session.query(AuthZRole)
         for role in roles:
-            if self.has_role(username, role):
+            db_role = session.query(AuthZRole).filter(AuthZRole.name == role).first()
+            if db_role is not None:
                 token_role = AuthNTokenRole()
                 token_role.token_id = token.id
-                token_role.role_id = role.id
+                token_role.role_id = db_role.id
                 session.add(token_role)
 
         return token

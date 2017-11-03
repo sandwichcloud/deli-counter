@@ -103,6 +103,12 @@ RABBITMQ_PASSWORD = os.environ['RABBITMQ_PASSWORD']
 AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', None).split(",")
 
 ####################
+# DB AUTH          #
+####################
+# TODO: implement
+# Does DB auth need any params?
+
+####################
 # GITHUB AUTH      #
 ####################
 
@@ -110,8 +116,11 @@ GITHUB_URL = os.environ.get('GITHUB_URL', 'https://api.github.com')
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 GITHUB_ORG = os.environ.get('GITHUB_ORG')
-GITHUB_TEAM_ROLES = os.environ.get('GITHUB_TEAM_ROLES', 'admin:sandwich-admin').split(",")
-GITHUB_TEAM_ROLES_PREFIX = os.environ.get("GITHUB_TEAM_ROLES_PREFIX", "")
+GITHUB_TEAM_ROLES_PREFIX = os.environ.get("GITHUB_TEAM_ROLES_PREFIX", "sandwich-")
+
+# Split the env var into a dict because it is faster to search
+_github_team_roles = os.environ.get('GITHUB_TEAM_ROLES', 'sandwich-admin:admin')
+GITHUB_TEAM_ROLES = dict(item.split(":") for item in _github_team_roles.split(","))
 
 ####################
 # GITLAB AUTH      #
@@ -129,9 +138,8 @@ GITLAB_ORG = os.environ.get('GITLAB_ORG')
 OPENID_ENDPOINT = os.environ.get('OPENID_ENDPOINT')
 OPENID_CLIENT_ID = os.environ.get('OPENID_CLIENT_ID')
 OPENID_CLIENT_SECRET = os.environ.get('OPENID_CLIENT_SECRET')
-OPENID_REQUIRED_SCOPES = os.environ.get('OPENID_REQUIRED_SCOPES')
-if OPENID_REQUIRED_SCOPES is not None:
-    OPENID_REQUIRED_SCOPES = OPENID_REQUIRED_SCOPES.split(",")
+_openid_required_scopes = os.environ.get('OPENID_REQUIRED_SCOPES')
+OPENID_REQUIRED_SCOPES = _openid_required_scopes.split(",") if _openid_required_scopes is not None else []
 
 ####################
 # LDAP AUTH        #
@@ -139,3 +147,4 @@ if OPENID_REQUIRED_SCOPES is not None:
 # TODO: implement
 LDAP_SERVER = os.environ.get('LDAP_SERVER')
 LDAP_USER_DN = os.environ.get('LDAP_USER_DN')
+LDAP_ROLE_DB = os.environ.get('LDAP_ROLE_DN')

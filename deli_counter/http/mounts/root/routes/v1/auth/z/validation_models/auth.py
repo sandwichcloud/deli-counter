@@ -1,5 +1,5 @@
 from schematics import Model
-from schematics.types import UUIDType, StringType
+from schematics.types import UUIDType, StringType, ListType
 
 from ingredients_db.models.authn import AuthNToken
 from ingredients_http.schematics.types import ArrowType
@@ -18,12 +18,13 @@ class ResponseVerifyToken(Model):
     access_token = StringType(required=True)
     user_id = UUIDType(required=True)
     project_id = UUIDType()
+    roles = ListType(StringType(), default=list)
     created_at = ArrowType(required=True)
     updated_at = ArrowType(required=True)
     expires_at = ArrowType(required=True)
 
     @classmethod
-    def from_database(cls, token: AuthNToken):
+    def from_database(cls, token: AuthNToken, roles):
         token_model = cls()
         token_model.id = token.id
         token_model.access_token = token.access_token
@@ -32,6 +33,9 @@ class ResponseVerifyToken(Model):
         token_model.created_at = token.created_at
         token_model.updated_at = token.updated_at
         token_model.expires_at = token.expires_at
+
+        for role in roles:
+            token_model.roles.append(role)
 
         return token_model
 

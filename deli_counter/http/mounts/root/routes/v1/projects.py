@@ -11,6 +11,9 @@ from ingredients_http.route import Route, RequestMethods
 from ingredients_http.router import Router
 
 
+# TODO: restrict project to certain networks
+
+
 class ProjectRouter(Router):
     def __init__(self):
         super().__init__(uri_base='projects')
@@ -20,7 +23,6 @@ class ProjectRouter(Router):
     @cherrypy.tools.model_out(cls=ResponseProject)
     @cherrypy.tools.enforce_policy(policy_name="projects:create")
     def create(self):
-        # TODO: default to admins only
         request: RequestCreateProject = cherrypy.request.model
 
         with cherrypy.request.db_session() as session:
@@ -51,34 +53,9 @@ class ProjectRouter(Router):
     @cherrypy.tools.model_out_pagination(cls=ResponseProject)
     @cherrypy.tools.enforce_policy(policy_name="projects:list")
     def list(self, name: str, limit: int, marker: uuid.UUID):
-        resp_projects = []
-
         # TODO: only list projects that we are a member of
         # optional param to list all
-
-        with cherrypy.request.db_session() as session:
-            projects = session.query(Project).order_by(Project.created_at.desc())
-
-            if name is not None:
-                projects = projects.filter(Project.name == name)
-
-            if marker is not None:
-                marker = session.query(Project).filter(Project.id == marker).first()
-                if marker is None:
-                    raise cherrypy.HTTPError(status=400, message="Unknown marker ID")
-                projects = projects.filter(Project.created_at < marker.created_at)
-
-            projects = projects.limit(limit + 1)
-
-            for project in projects:
-                resp_projects.append(ResponseProject.from_database(project))
-
-        more_pages = False
-        if len(resp_projects) > limit:
-            more_pages = True
-            del resp_projects[-1]  # Remove the last item to reset back to original limit
-
-        return resp_projects, more_pages
+        return self.mount.paginate(Project, ResponseProject, limit, marker)
 
     @Route(route='{project_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsProject)
@@ -86,10 +63,11 @@ class ProjectRouter(Router):
     @cherrypy.tools.enforce_policy(policy_name="projects:delete")
     def delete(self, project_id):
         cherrypy.response.status = 204
+        # Fix for https://github.com/cherrypy/cherrypy/issues/1657
+        del cherrypy.response.headers['Content-Type']
 
         with cherrypy.request.db_session() as session:
-            project: Project = cherrypy.request.resource_object
-            session.refresh(project)
+            project: Project = session.merge(cherrypy.request.resource_object, load=False)
 
             if project.state != ProjectState.CREATED:
                 raise cherrypy.HTTPError(409, "Project with the requested id is not in the '%s' state" % (
