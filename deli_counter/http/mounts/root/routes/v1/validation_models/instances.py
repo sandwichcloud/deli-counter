@@ -36,9 +36,6 @@ class ResponseInstance(Model):
         instance_model.state = instance.state
         instance_model.tags = instance.tags
 
-        for public_key in instance.public_keys:
-            instance_model.public_keys.append(public_key.id)
-
         instance_model.created_at = instance.created_at
         instance_model.updated_at = instance.updated_at
 

@@ -2,6 +2,7 @@ import uuid
 
 import cherrypy
 from sqlalchemy import or_
+from sqlalchemy.orm import Query
 
 from deli_counter.http.mounts.root.routes.v1.validation_models.images import ParamsImage, RequestCreateImage, \
     ResponseImage, ParamsListImage
@@ -35,13 +36,13 @@ class ImageRouter(Router):
                 Image.name == request.name).first()
 
             if image is not None:
-                raise cherrypy.HTTPError(409, 'An image already exists with the requested name.')
+                raise cherrypy.HTTPError(409, 'An image with the requested name already exists.')
 
             image = session.query(Image).filter(Image.project_id == project.id).filter(
                 Image.file_name == request.file_name).first()
 
             if image is not None:
-                raise cherrypy.HTTPError(409, 'An image already exists with the requested file name.')
+                raise cherrypy.HTTPError(409, 'An image with the requested file already exists.')
 
             image = Image()
             image.name = request.name
@@ -74,32 +75,12 @@ class ImageRouter(Router):
     @cherrypy.tools.model_out_pagination(cls=ResponseImage)
     @cherrypy.tools.enforce_policy(policy_name="images:list")
     def list(self, limit: int, marker: uuid.UUID):
-        resp_images = []
-        with cherrypy.request.db_session() as session:
-            project = cherrypy.request.project
-
-            images = session.query(Image).filter(
-                or_(Image.project_id == project.id,
-                    Image.visibility == ImageVisibility.PUBLIC,
-                    Image.members.any(id=project.id))).order_by(Image.created_at.desc())
-
-            if marker is not None:
-                marker = session.query(Image).filter(Image.id == marker).first()
-                if marker is None:
-                    raise cherrypy.HTTPError(status=400, message="Unknown marker ID")
-                images = images.filter(Image.created_at < marker.created_at)
-
-            images = images.limit(limit + 1)
-
-            for image in images:
-                resp_images.append(ResponseImage.from_database(image))
-
-        more_pages = False
-        if len(resp_images) > limit:
-            more_pages = True
-            del resp_images[-1]  # Remove the last item to reset back to original limit
-
-        return resp_images, more_pages
+        project = cherrypy.request.project
+        starting_query = Query(Image).filter(
+            or_(Image.project_id == project.id,
+                Image.visibility == ImageVisibility.PUBLIC,
+                Image.members.any(id=project.id)))
+        return self.mount.paginate(Image, ResponseImage, limit, marker, starting_query=starting_query)
 
     @Route(route='{image_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.project_scope()
@@ -109,8 +90,7 @@ class ImageRouter(Router):
     def delete(self, image_id):
         cherrypy.response.status = 202
         with cherrypy.request.db_session() as session:
-            image: Image = cherrypy.request.resource_object
-            session.refresh(image)
+            image: Image = session.merge(cherrypy.request.resource_object, load=False)
 
             if image.state not in [ImageState.CREATED, ImageState.ERROR]:
                 raise cherrypy.HTTPError(409, "Can only delete an image while it is in the following states: %s" % (
@@ -124,8 +104,6 @@ class ImageRouter(Router):
 
             session.commit()
 
-            # TODO: add/remove members
-
     @Route(route='{image_id}/action/lock', methods=[RequestMethods.PUT])
     @cherrypy.tools.project_scope()
     @cherrypy.tools.model_params(cls=ParamsImage)
@@ -134,8 +112,7 @@ class ImageRouter(Router):
     def action_lock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            image: Image = cherrypy.request.resource_object
-            session.refresh(image)
+            image: Image = session.merge(cherrypy.request.resource_object, load=False)
 
             if image.locked:
                 raise cherrypy.HTTPError(409, "Can only lock unlocked images.")
@@ -151,11 +128,12 @@ class ImageRouter(Router):
     def action_unlock(self, image_id):
         cherrypy.response.status = 204
         with cherrypy.request.db_session() as session:
-            image: Image = cherrypy.request.resource_object
-            session.refresh(image)
+            image: Image = session.merge(cherrypy.request.resource_object, load=False)
 
             if image.locked is False:
                 raise cherrypy.HTTPError(409, "Can only unlock locked images.")
 
             image.locked = False
             session.commit()
+
+            # TODO: add/remove members

@@ -15,7 +15,7 @@ class ParamsListImage(Model):
 
 
 class RequestCreateImage(Model):
-    name = StringType(required=True)
+    name = StringType(required=True, min_length=3)
     file_name = StringType(required=True)
     visibility = EnumType(ImageVisibility, required=True)
 

@@ -14,9 +14,8 @@ from ingredients_db.models.project import Project
 
 
 class AuthManager(object):
-    def __init__(self, database):
+    def __init__(self):
         self.logger = logging.getLogger("%s.%s" % (self.__module__, self.__class__.__name__))
-        self.database = database
         self.enforcer = Enforcer(cfg.CONF, use_conf=False)
         self.drivers = {}
 
@@ -47,18 +46,25 @@ class AuthManager(object):
         if len(self.drivers) == 0:
             raise ValueError("No auth drivers loaded")
 
-    def load_policies(self):
+    def load_policies(self, session, dry=False):
+
+        if dry:
+            enforcer = Enforcer(cfg.CONF, use_conf=False)
+        else:
+            enforcer = self.enforcer
+        enforcer.clear()
+
         rules = {}
-        with self.database.session() as session:
-            policies = session.query(AuthZPolicy)
-            for policy in policies:
-                rules[policy.name] = policy.rule
-                self.enforcer.register_default(RuleDefault(policy.name, policy.rule, policy.description))
+        policies = session.query(AuthZPolicy)
+        for policy in policies:
+            rules[policy.name] = policy.rule
+            enforcer.register_default(RuleDefault(policy.name, policy.rule, policy.description))
 
-        self.enforcer.set_rules(Rules.from_dict(rules), overwrite=True, use_conf=False)
-        self.enforcer.check_rules(raise_on_violation=True)
+        enforcer.set_rules(Rules.from_dict(rules), overwrite=True, use_conf=False)
+        enforcer.check_rules(raise_on_violation=True)
 
-    def enforce_policy(self, policy_name, token: AuthNToken, user: AuthNUser, project: Project, resource_object):
+    def enforce_policy(self, policy_name, session, token: AuthNToken, user: AuthNUser, project: Project,
+                       resource_object):
         creds = {
             "roles": [],
             "user_id": str(user.id)
@@ -84,12 +90,11 @@ class AuthManager(object):
             target['project_id'] = project.id
 
         # Find all roles that the token has and add it to the creds
-        with self.database.session() as session:
-            token_roles = session.query(AuthZRole).join(AuthNTokenRole, AuthZRole.id == AuthNTokenRole.role_id).filter(
-                AuthNTokenRole.token_id == token.id)
+        token_roles = session.query(AuthZRole).join(AuthNTokenRole, AuthZRole.id == AuthNTokenRole.role_id).filter(
+            AuthNTokenRole.token_id == token.id)
 
-            for role in token_roles:
-                creds['roles'].append(role.name)
+        for role in token_roles:
+            creds['roles'].append(role.name)
 
         self.enforcer.authorize(policy_name, target, creds, do_raise=True, exc=cherrypy.HTTPError, status=403,
                                 message="Insufficient permissions to perform the requested action.")

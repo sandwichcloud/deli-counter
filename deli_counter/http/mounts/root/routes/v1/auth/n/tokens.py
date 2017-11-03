@@ -1,7 +1,10 @@
 import cherrypy
 
-from deli_counter.http.mounts.root.routes.v1.validation_models.auth import ResponseVerifyToken, RequestScopeToken, \
+from deli_counter.http.mounts.root.routes.v1.auth.z.validation_models.auth import ResponseVerifyToken, \
+    RequestScopeToken, \
     ResponseOAuthToken
+from ingredients_db.models.authn import AuthNTokenRole
+from ingredients_db.models.authz import AuthZRole
 from ingredients_db.models.project import Project
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
@@ -16,11 +19,21 @@ class AuthNTokenRouter(Router):
     @cherrypy.tools.model_out(cls=ResponseVerifyToken)
     def get(self):
         # TODO: allow getting another token with X-Subject-Token-ID header
-        return ResponseVerifyToken.from_database(cherrypy.request.token)
+        role_names = []
+        with cherrypy.request.db_session() as session:
+            roles = session.query(AuthZRole).join(AuthNTokenRole, AuthZRole.id == AuthNTokenRole.role_id).filter(
+                AuthNTokenRole.token_id == cherrypy.request.token.id)
+
+            for role in roles:
+                role_names.append(role.name)
+
+        return ResponseVerifyToken.from_database(cherrypy.request.token, role_names)
 
     @Route(methods=[RequestMethods.HEAD])
     def head(self):
-        pass
+        cherrypy.response.status = 204
+        # Fix for https://github.com/cherrypy/cherrypy/issues/1657
+        del cherrypy.response.headers['Content-Type']
 
     # Generate a new token scoped for the requested project
     @Route(route='scope', methods=[RequestMethods.POST])
