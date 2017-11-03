@@ -2,7 +2,7 @@ language: python
 python:
 - '3.6'
 env:
-#- TOXENV=py36
+- TOXENV=py36
 - TOXENV=flake8
 - TOXENV=build
 install:
