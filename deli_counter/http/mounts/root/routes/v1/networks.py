@@ -42,6 +42,8 @@ class NetworkRouter(Router):
             network.name = request.name
             network.port_group = request.port_group
             network.cidr = request.cidr
+            network.gateway = request.gateway
+            network.dns_servers = request.dns_servers
             network.pool_start = request.pool_start
             network.pool_end = request.pool_end
 

@@ -116,8 +116,10 @@ class DeliTestCase(APITestCase):
 
             # TODO: may need ability to specify these ips
             network.cidr = ipaddress.IPv4Network("192.168.1.0/24")
-            network.pool_start = "192.168.1.1"
-            network.pool_end = "192.168.1.254"
+            network.gateway = ipaddress.IPv4Address("192.168.1.1")
+            network.dns_servers = [ipaddress.IPv4Address("8.8.8.8"), ipaddress.IPv4Address("8.8.4.4")]
+            network.pool_start = ipaddress.IPv4Address("192.168.1.1")
+            network.pool_end = ipaddress.IPv4Address("192.168.1.254")
             network.state = NetworkState.CREATED
 
             session.add(network)
