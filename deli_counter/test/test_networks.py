@@ -17,6 +17,8 @@ class TestNetwork(DeliTestCase):
             "name": fake.pystr(min_chars=3),
             "port_group": fake.pystr(min_chars=3),
             "cidr": "10.0.0.0/24",
+            "gateway": "10.0.0.1",
+            "dns_servers": ["8.8.8.8", "8.8.4.4"],
             "pool_start": "10.0.0.10",
             "pool_end": "10.0.0.254"
         }

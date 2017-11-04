@@ -2,7 +2,7 @@ import ipaddress  # noqa: F401
 
 from schematics import Model
 from schematics.exceptions import ValidationError
-from schematics.types import UUIDType, IntType, StringType
+from schematics.types import UUIDType, IntType, StringType, ListType
 
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_http.schematics.types import IPv4NetworkType, IPv4AddressType, EnumType, ArrowType
@@ -12,8 +12,18 @@ class RequestCreateNetwork(Model):
     name = StringType(required=True, min_length=3)
     port_group = StringType(required=True)
     cidr = IPv4NetworkType(required=True)
+    gateway = IPv4AddressType(required=True)
+    dns_servers = ListType(IPv4AddressType, min_size=1, required=True)
     pool_start = IPv4AddressType(required=True)
     pool_end = IPv4AddressType(required=True)
+
+    def validate_gateway(self, data, value):
+        cidr: ipaddress.IPv4Network = data['cidr']
+
+        if value not in cidr:
+            raise ValidationError('gateway is not an address within ' + str(cidr))
+
+        return value
 
     def validate_pool_start(self, data, value):
         cidr: ipaddress.IPv4Network = data['cidr']
@@ -40,6 +50,8 @@ class ResponseNetwork(Model):
     name = StringType(required=True, min_length=3)
     port_group = StringType(required=True)
     cidr = IPv4NetworkType(required=True)
+    gateway = IPv4AddressType(required=True)
+    dns_servers = ListType(IPv4AddressType, min_size=1, required=True)
     pool_start = IPv4AddressType(required=True)
     pool_end = IPv4AddressType(required=True)
     state = EnumType(NetworkState, required=True)
@@ -57,6 +69,8 @@ class ResponseNetwork(Model):
 
         network_model.port_group = network.port_group
         network_model.cidr = network.cidr
+        network_model.gateway = network.gateway
+        network_model.dns_servers = network.dns_servers
         network_model.pool_start = network.pool_start
         network_model.pool_end = network.pool_end
 

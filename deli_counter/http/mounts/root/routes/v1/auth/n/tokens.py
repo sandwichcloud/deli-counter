@@ -56,7 +56,12 @@ class AuthNTokenRouter(Router):
                 raise cherrypy.HTTPError(500, "Previous auth driver '%s' is not loaded. Cannot scope token."
                                          % cherrypy.request.token.driver)
 
-            token = driver.generate_user_token(session, cherrypy.request.user.username)
+            roles = session.query(AuthZRole).join(AuthNTokenRole, AuthNTokenRole.role_id == AuthZRole.id).filter(
+                AuthNTokenRole.token_id == cherrypy.request.token.id)
+            role_names = []
+            for role in roles:
+                role_names.append(role.name)
+            token = driver.generate_user_token(session, cherrypy.request.user.username, role_names)
             # Should project tokens last the same amount of time?
             token.project_id = project.id
             session.commit()
