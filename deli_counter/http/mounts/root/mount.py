@@ -1,7 +1,6 @@
 import arrow
 import cherrypy
 from simple_settings import settings
-from sqlalchemy.orm import Query
 
 from deli_counter.auth.manager import AuthManager
 from ingredients_db.models.authn import AuthNToken, AuthNUser
@@ -63,32 +62,6 @@ class RootMount(ApplicationMount):
         with cherrypy.request.db_session() as session:
             self.auth_manager.enforce_policy(policy_name, session, cherrypy.request.token, cherrypy.request.user,
                                              cherrypy.request.project, resource_object)
-
-    def paginate(self, db_cls, response_cls, limit, marker, starting_query=None):
-        if starting_query is None:
-            starting_query = Query(db_cls)
-        resp_objects = []
-        with cherrypy.request.db_session() as session:
-            starting_query.session = session
-            db_objects = starting_query.order_by(db_cls.created_at.desc())
-
-            if marker is not None:
-                marker = session.query(db_cls).filter(db_cls.id == marker).first()
-                if marker is None:
-                    raise cherrypy.HTTPError(status=400, message="Unknown marker ID")
-                db_objects = db_objects.filter(db_cls.created_at < marker.created_at)
-
-            db_objects = db_objects.limit(limit + 1)
-
-            for db_object in db_objects:
-                resp_objects.append(response_cls.from_database(db_object))
-
-        more_pages = False
-        if len(resp_objects) > limit:
-            more_pages = True
-            del resp_objects[-1]  # Remove the last item to reset back to original limit
-
-        return resp_objects, more_pages
 
     def resource_object(self, id_param, cls):
         resource_id = cherrypy.request.params[id_param]

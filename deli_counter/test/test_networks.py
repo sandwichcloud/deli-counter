@@ -12,6 +12,7 @@ class TestNetwork(DeliTestCase):
 
     def test_create(self, wsgi, app):
         admin_token = self.create_token(app, roles=["admin"])
+        region = self.create_region(app)
 
         network_data = {
             "name": fake.pystr(min_chars=3),
@@ -20,7 +21,8 @@ class TestNetwork(DeliTestCase):
             "gateway": "10.0.0.1",
             "dns_servers": ["8.8.8.8", "8.8.4.4"],
             "pool_start": "10.0.0.10",
-            "pool_end": "10.0.0.254"
+            "pool_end": "10.0.0.254",
+            "region_id": str(region.id)
         }
 
         # Test create

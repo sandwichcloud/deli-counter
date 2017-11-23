@@ -12,13 +12,15 @@ class TestImage(DeliTestCase):
 
     def test_create(self, wsgi, app):
         project = self.create_project(app)
+        region = self.create_region(app)
         token = self.create_token(app, project=project)
         admin_token = self.create_token(app, roles=['admin'], project=project)
 
         image_data = {
             "name": fake.pystr(min_chars=3),
             "file_name": fake.pystr(min_chars=3),
-            "visibility": "PRIVATE"
+            "visibility": "PRIVATE",
+            "region_id": str(region.id)
         }
 
         # Test create normal
@@ -50,7 +52,8 @@ class TestImage(DeliTestCase):
         image_data = {
             "name": fake.pystr(min_chars=3),
             "file_name": fake.pystr(min_chars=3),
-            "visibility": "PUBLIC"
+            "visibility": "PUBLIC",
+            "region_id": str(region.id)
         }
         self.post(wsgi, "/v1/images", image_data, token=token, status=403)
 

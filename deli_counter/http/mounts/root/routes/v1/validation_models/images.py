@@ -10,6 +10,7 @@ class ParamsImage(Model):
 
 
 class ParamsListImage(Model):
+    region_id = UUIDType()
     limit = IntType(default=100, max_value=100, min_value=1)
     marker = UUIDType()
 
@@ -18,6 +19,7 @@ class RequestCreateImage(Model):
     name = StringType(required=True, min_length=3)
     file_name = StringType(required=True)
     visibility = EnumType(ImageVisibility, required=True)
+    region_id = UUIDType(required=True)
 
 
 class ResponseImage(Model):
@@ -26,6 +28,7 @@ class ResponseImage(Model):
     file_name = StringType(required=True)
     locked = BooleanType(required=True)
     visibility = EnumType(ImageVisibility, required=True)
+    region_id = UUIDType(required=True)
     state = EnumType(ImageState, required=True)
     current_task_id = UUIDType()
     created_at = ArrowType(required=True)
@@ -40,6 +43,7 @@ class ResponseImage(Model):
         image_model.file_name = image.file_name
         image_model.visibility = image.visibility
         image_model.locked = image.locked
+        image_model.region_id = image.region_id
         image_model.state = image.state
         image_model.current_task_id = image.current_task_id
 

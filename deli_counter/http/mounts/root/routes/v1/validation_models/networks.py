@@ -16,6 +16,7 @@ class RequestCreateNetwork(Model):
     dns_servers = ListType(IPv4AddressType, min_size=1, required=True)
     pool_start = IPv4AddressType(required=True)
     pool_end = IPv4AddressType(required=True)
+    region_id = UUIDType(required=True)
 
     def validate_gateway(self, data, value):
         cidr: ipaddress.IPv4Network = data['cidr']
@@ -54,6 +55,7 @@ class ResponseNetwork(Model):
     dns_servers = ListType(IPv4AddressType, min_size=1, required=True)
     pool_start = IPv4AddressType(required=True)
     pool_end = IPv4AddressType(required=True)
+    region_id = UUIDType(required=True)
     state = EnumType(NetworkState, required=True)
     current_task_id = UUIDType()
     created_at = ArrowType(required=True)
@@ -74,6 +76,8 @@ class ResponseNetwork(Model):
         network_model.pool_start = network.pool_start
         network_model.pool_end = network.pool_end
 
+        network_model.region_id = network.region_id
+
         network_model.state = network.state
         network_model.current_task_id = network.current_task_id
 
@@ -88,5 +92,6 @@ class ParamsNetwork(Model):
 
 
 class ParamsListNetwork(Model):
+    region_id = UUIDType()
     limit = IntType(default=100, max_value=100, min_value=1)
     marker = UUIDType()

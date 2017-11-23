@@ -7,6 +7,7 @@ from sqlalchemy.orm import Query
 from deli_counter.http.mounts.root.routes.v1.validation_models.images import ParamsImage, RequestCreateImage, \
     ResponseImage, ParamsListImage
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
+from ingredients_db.models.region import Region, RegionState
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -44,11 +45,21 @@ class ImageRouter(Router):
             if image is not None:
                 raise cherrypy.HTTPError(409, 'An image with the requested file already exists.')
 
+            region = session.query(Region).filter(Region.id == request.region_id).first()
+            if region is None:
+                raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+
+            if region.state != RegionState.CREATED:
+                raise cherrypy.HTTPError(412,
+                                         "The requested region is not in the following state: %s" %
+                                         RegionState.CREATED.value)
+
             image = Image()
             image.name = request.name
             image.file_name = request.file_name
             image.visibility = request.visibility
             image.project_id = project.id
+            image.region_id = region.id
 
             session.add(image)
             session.flush()
@@ -74,13 +85,19 @@ class ImageRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsListImage)
     @cherrypy.tools.model_out_pagination(cls=ResponseImage)
     @cherrypy.tools.enforce_policy(policy_name="images:list")
-    def list(self, limit: int, marker: uuid.UUID):
+    def list(self, region_id, limit: int, marker: uuid.UUID):
         project = cherrypy.request.project
         starting_query = Query(Image).filter(
             or_(Image.project_id == project.id,
                 Image.visibility == ImageVisibility.PUBLIC,
                 Image.members.any(id=project.id)))
-        return self.mount.paginate(Image, ResponseImage, limit, marker, starting_query=starting_query)
+        if region_id is not None:
+            with cherrypy.request.db_session() as session:
+                region = session.query(Region).filter(Region.id == region_id).first()
+                if region is None:
+                    raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+            starting_query = starting_query.filter(Image.region_id == region.id)
+        return self.paginate(Image, ResponseImage, limit, marker, starting_query=starting_query)
 
     @Route(route='{image_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.project_scope()

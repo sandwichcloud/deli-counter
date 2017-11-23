@@ -12,14 +12,16 @@ class TestInstance(DeliTestCase):
 
     def test_create(self, wsgi, app):
         project = self.create_project(app)
+        region = self.create_region(app)
         token = self.create_token(app, project=project)
-        network = self.create_network(app)
-        image = self.create_image(app, project=project)
+        network = self.create_network(app, region=region)
+        image = self.create_image(app, project=project, region=region)
 
         instance_data = {
             "name": fake.pystr(min_chars=3),
             "image_id": str(image.id),
-            "network_id": str(network.id)
+            "network_id": str(network.id),
+            "region_id": str(region.id)
         }
 
         # Test create normal
@@ -39,9 +41,10 @@ class TestInstance(DeliTestCase):
     def test_get(self, wsgi, app):
         project = self.create_project(app)
         token = self.create_token(app, project=project)
-        network = self.create_network(app)
-        image = self.create_image(app, project)
-        instance = self.create_instance(app, project, image, network)
+        region = self.create_region(app)
+        network = self.create_network(app, region=region)
+        image = self.create_image(app, project, region=region)
+        instance = self.create_instance(app, project=project, region=region, image=image, network=network)
 
         # Test invalid
         self.get(wsgi, '/v1/instances/%s' % uuid.uuid4(), token=token, status=404)
@@ -59,16 +62,17 @@ class TestInstance(DeliTestCase):
         # Test List
         resp = self.get(wsgi, "/v1/instances", token=token)
         assert 'instances' in resp.json
-        for instane_json in resp.json['instances']:
-            instance_model = ResponseInstance(instane_json)
-            assert instane_json == instance_model.to_primitive()
+        for instance_json in resp.json['instances']:
+            instance_model = ResponseInstance(instance_json)
+            assert instance_json == instance_model.to_primitive()
 
     def test_delete(self, wsgi, app):
         project = self.create_project(app)
         token = self.create_token(app, project=project)
-        network = self.create_network(app)
-        image = self.create_image(app, project)
-        instance = self.create_instance(app, project, image, network)
+        region = self.create_region(app)
+        network = self.create_network(app, region=region)
+        image = self.create_image(app, project, region=region)
+        instance = self.create_instance(app, project, region=region, image=image, network=network)
 
         # Test invalid
         self.delete(wsgi, "/v1/instances/%s" % uuid.uuid4(), token=token, status=404)

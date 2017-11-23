@@ -1,11 +1,13 @@
 import uuid
 
 import cherrypy
+from sqlalchemy.orm import Query
 
 from deli_counter.http.mounts.root.routes.v1.validation_models.networks import RequestCreateNetwork, ResponseNetwork, \
     ParamsNetwork, ParamsListNetwork
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_db.models.network_port import NetworkPort
+from ingredients_db.models.region import Region, RegionState
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -36,6 +38,15 @@ class NetworkRouter(Router):
             if network is not None:
                 raise cherrypy.HTTPError(409, "A network with the requested port group already exists.")
 
+            region = session.query(Region).filter(Region.id == request.region_id).first()
+            if region is None:
+                raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+
+            if region.state != RegionState.CREATED:
+                raise cherrypy.HTTPError(412,
+                                         "The requested region is not in the following state: %s" %
+                                         RegionState.CREATED.value)
+
             # TODO: make sure cidr doesn't overlap with another network
 
             network = Network()
@@ -46,6 +57,7 @@ class NetworkRouter(Router):
             network.dns_servers = request.dns_servers
             network.pool_start = request.pool_start
             network.pool_end = request.pool_end
+            network.region_id = region.id
 
             session.add(network)
             session.flush()
@@ -69,8 +81,15 @@ class NetworkRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsListNetwork)
     @cherrypy.tools.model_out_pagination(cls=ResponseNetwork)
     @cherrypy.tools.enforce_policy(policy_name="networks:list")
-    def list(self, limit: int, marker: uuid.UUID):
-        return self.mount.paginate(Network, ResponseNetwork, limit, marker)
+    def list(self, region_id, limit: int, marker: uuid.UUID):
+        starting_query = Query(Network)
+        if region_id is not None:
+            with cherrypy.request.db_session() as session:
+                region = session.query(Region).filter(Region.id == region_id).first()
+                if region is None:
+                    raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+            starting_query = starting_query.filter(Network.region_id == region.id)
+        return self.paginate(Network, ResponseNetwork, limit, marker, starting_query=starting_query)
 
     @Route(route='{network_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsNetwork)
