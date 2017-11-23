@@ -63,7 +63,7 @@ class AuthZPolicyRouter(Router):
     @cherrypy.tools.model_out_pagination(cls=ResponsePolicy)
     @cherrypy.tools.enforce_policy(policy_name="policies:list")
     def list(self, limit: int, marker: uuid.UUID):
-        return self.mount.paginate(AuthZPolicy, ResponsePolicy, limit, marker)
+        return self.paginate(AuthZPolicy, ResponsePolicy, limit, marker)
 
     @Route('{policy_id}', methods=[RequestMethods.PUT])
     @cherrypy.tools.model_params(cls=ParamsPolicy)

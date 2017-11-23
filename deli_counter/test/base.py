@@ -13,6 +13,8 @@ from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_db.models.network_port import NetworkPort
 from ingredients_db.models.project import Project, ProjectState
+from ingredients_db.models.region import Region, RegionState
+from ingredients_db.models.zones import Zone, ZoneState
 from ingredients_http.test.base import APITestCase
 
 fake = Faker()
@@ -108,10 +110,54 @@ class DeliTestCase(APITestCase):
 
         return project
 
-    def create_network(self, app, name=None, port_group=None) -> Network:
+    def create_region(self, app, name=None) -> Region:
+        with app.database.session() as session:
+            region = Region()
+            region.name = fake.pystr(min_chars=3) if name is None else name
+            region.datacenter = fake.pystr(min_chars=3)
+            region.image_datastore = fake.pystr(min_chars=3)
+            region.schedulable = True
+            region.image_folder = None
+            region.state = RegionState.CREATED
+
+            session.add(region)
+            session.commit()
+            session.refresh(region)
+            session.expunge(region)
+
+        return region
+
+    def create_zone(self, app, region=None, name=None) -> Zone:
+        if region is None:
+            region = self.create_region(app)
+
+        with app.database.session() as session:
+            zone = Zone()
+            zone.name = fake.pystr(min_chars=3) if name is None else name
+            zone.region_id = region.id
+            zone.vm_cluster = fake.pystr(min_chars=3)
+            zone.vm_datastore = fake.pystr(min_chars=3)
+            zone.core_provision_percent = 100
+            zone.ram_provision_percent = 100
+            zone.schedulable = True
+            zone.vm_folder = None
+            zone.state = ZoneState.CREATED
+
+            session.add(zone)
+            session.commit()
+            session.refresh(zone)
+            session.expunge(zone)
+
+        return zone
+
+    def create_network(self, app, name=None, region=None, port_group=None) -> Network:
+        if region is None:
+            region = self.create_region(app)
+
         with app.database.session() as session:
             network = Network()
             network.name = fake.pystr(min_chars=3) if name is None else name
+            network.region_id = region.id
             network.port_group = fake.pystr(min_chars=3) if port_group is None else port_group
 
             # TODO: may need ability to specify these ips
@@ -129,14 +175,18 @@ class DeliTestCase(APITestCase):
 
         return network
 
-    def create_image(self, app, project=None, name=None, file_name=None, visibility=ImageVisibility.PRIVATE) -> Image:
+    def create_image(self, app, project=None, region=None, name=None, file_name=None,
+                     visibility=ImageVisibility.PRIVATE) -> Image:
         if project is None:
             project = self.create_project(app)
+        if region is None:
+            region = self.create_region(app)
 
         with app.database.session() as session:
             image = Image()
             image.name = fake.pystr(min_chars=3) if name is None else name
             image.project_id = project.id
+            image.region_id = region.id
             image.visibility = visibility
             image.file_name = fake.pystr(min_chars=3) if file_name is None else file_name
             image.state = ImageState.CREATED
@@ -148,13 +198,18 @@ class DeliTestCase(APITestCase):
 
         return image
 
-    def create_instance(self, app, project=None, image=None, network=None, name=None) -> Instance:
+    def create_instance(self, app, project=None, region=None, zone=None, image=None, network=None,
+                        name=None) -> Instance:
         if project is None:
             project = self.create_project(app)
-        if image is None:
-            image = self.create_image(app)
+        if region is None:
+            region = self.create_region(app)
+        if zone is None:
+            zone = self.create_zone(app, region=region)
         if network is None:
-            network = self.create_network(app)
+            network = self.create_network(app, region=region)
+        if image is None:
+            image = self.create_image(app, project=project, region=region)
 
         with app.database.session() as session:
 
@@ -167,6 +222,8 @@ class DeliTestCase(APITestCase):
 
             instance = Instance()
             instance.name = fake.pystr(min_chars=3) if name is None else name
+            instance.region_id = region.id
+            instance.zone_id = zone.id
             instance.project_id = project.id
             instance.image_id = image.id
             instance.tags = {}  # TODO: allow specifying tags

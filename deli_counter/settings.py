@@ -100,7 +100,8 @@ RABBITMQ_PASSWORD = os.environ['RABBITMQ_PASSWORD']
 ####################
 
 # TODO: default to db driver
-AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', None).split(",")
+AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', "").split(",")
+# AUTH_DRIVERS.append("deli_counter.auth_drivers.db.driver:DBAuthDriver")
 
 ####################
 # DB AUTH          #

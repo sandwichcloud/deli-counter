@@ -12,7 +12,9 @@ from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_db.models.network_port import NetworkPort
 from ingredients_db.models.public_key import PublicKey
+from ingredients_db.models.region import Region, RegionState
 from ingredients_db.models.task import Task
+from ingredients_db.models.zones import Zone, ZoneState
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -34,19 +36,28 @@ class InstanceRouter(Router):
     def create(self):
         request: RequestCreateInstance = cherrypy.request.model
 
-        # TODO: allow multiple instances to be created at once add -# to the name
-
         with cherrypy.request.db_session() as session:
             project = cherrypy.request.project
 
             instance = session.query(Instance).filter(Instance.project_id == project.id).filter(
                 Instance.name == request.name).first()
-
             if instance is not None:
                 raise cherrypy.HTTPError(409, 'An instance already exists with the requested name.')
 
-            image = session.query(Image).filter(Image.id == request.image_id).first()
+            region = session.query(Region).filter(Region.id == request.region_id).first()
+            if region is None:
+                raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
 
+            if region.state != RegionState.CREATED:
+                raise cherrypy.HTTPError(412,
+                                         "The requested region is not in the following state: %s" %
+                                         RegionState.CREATED.value)
+
+            if region.schedulable is False:
+                raise cherrypy.HTTPError(412, "The requested region is not currently schedulable.")
+
+            image = session.query(Image).filter(Image.id == request.image_id).filter(
+                Image.region_id == region.id).first()
             if image is None:
                 raise cherrypy.HTTPError(404, "An image with the requested id does not exist.")
 
@@ -64,14 +75,29 @@ class InstanceRouter(Router):
                     # Image is public so don't error
                     pass
 
-            network = session.query(Network).filter(Network.id == request.network_id).first()
-
+            network = session.query(Network).filter(Network.id == request.network_id).filter(
+                Network.region_id == region.id).first()
             if network is None:
                 raise cherrypy.HTTPError(404, "A network with the requested id does not exist.")
 
             if network.state != NetworkState.CREATED:
                 raise cherrypy.HTTPError(412, "The requested network is not in the '%s' state" % (
                     NetworkState.CREATED.value))
+
+            zone = None
+            if request.zone_id is not None:
+                zone = session.query(Zone).filter(Zone.id == request.zone_id).filter(
+                    Zone.region_id == region.id).first()
+                if zone is None:
+                    raise cherrypy.HTTPError(404, "A zone with the requested id does not exist.")
+
+                if zone.state != ZoneState.CREATED:
+                    raise cherrypy.HTTPError(412,
+                                             "The requested zone is not in the following state: %s" %
+                                             ZoneState.CREATED.value)
+
+                if zone.schedulable is False:
+                    raise cherrypy.HTTPError(412, "The requested zone is not currently schedulable.")
 
             network_port = NetworkPort()
             network_port.network_id = network.id
@@ -84,6 +110,11 @@ class InstanceRouter(Router):
             instance.project_id = project.id
             instance.network_port_id = network_port.id
             instance.tags = request.tags
+
+            instance.region_id = region.id
+            if zone is not None:
+                instance.zone_id = zone.id
+
             session.add(instance)
             session.flush()
 
@@ -120,11 +151,25 @@ class InstanceRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsListInstance)
     @cherrypy.tools.model_out_pagination(cls=ResponseInstance)
     @cherrypy.tools.enforce_policy(policy_name="instances:list")
-    def list(self, image_id: uuid.UUID, limit: int, marker: uuid.UUID):
+    def list(self, image_id, region_id, zone_id, limit: int, marker: uuid.UUID):
         # TODO: allow filtering by tags
         project = cherrypy.request.project
         starting_query = Query(Instance).filter(Instance.project_id == project.id)
-        return self.mount.paginate(Instance, ResponseInstance, limit, marker, starting_query=starting_query)
+        if image_id is not None:
+            starting_query = starting_query.filter(Instance.image_id == image_id)
+        if region_id is not None:
+            with cherrypy.request.db_session() as session:
+                region = session.query(Region).filter(Region.id == region_id).first()
+                if region is None:
+                    raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+            starting_query = starting_query.filter(Instance.region_id == region.id)
+        if zone_id is not None:
+            with cherrypy.request.db_session() as session:
+                zone = session.query(Zone).filter(Zone.id == zone_id).first()
+                if zone is None:
+                    raise cherrypy.HTTPError(404, "A zone with the requested id does not exist.")
+            starting_query = starting_query.filter(Instance.zone_id == zone_id)
+        return self.paginate(Instance, ResponseInstance, limit, marker, starting_query=starting_query)
 
     @Route(route='{instance_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.project_scope()
@@ -240,6 +285,9 @@ class InstanceRouter(Router):
                 raise cherrypy.HTTPError(409, "Can only image an instance in the following state: %s" %
                                          InstanceState.STOPPED.value)
 
+            region = session.query(Region).join(Zone, Region.id == Zone.region_id).filter(
+                Zone.id == instance.zone_id).one()
+
             instance.state = InstanceState.IMAGING
 
             image = Image()
@@ -247,6 +295,7 @@ class InstanceRouter(Router):
             image.file_name = str(instance.id)
             image.visibility = request.visibility
             image.project_id = instance.project_id
+            image.region_id = region.id
 
             session.add(image)
             session.flush()

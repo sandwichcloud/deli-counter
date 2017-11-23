@@ -50,7 +50,7 @@ class AuthZRoleRouter(Router):
     @cherrypy.tools.model_out_pagination(cls=ResponseRole)
     @cherrypy.tools.enforce_policy(policy_name="roles:list")
     def list(self, limit: int, marker: uuid.UUID):
-        return self.mount.paginate(AuthZRole, ResponseRole, limit, marker)
+        return self.paginate(AuthZRole, ResponseRole, limit, marker)
 
     @Route('{role_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsRole)

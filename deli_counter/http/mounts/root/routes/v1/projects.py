@@ -55,7 +55,7 @@ class ProjectRouter(Router):
     def list(self, name: str, limit: int, marker: uuid.UUID):
         # TODO: only list projects that we are a member of
         # optional param to list all
-        return self.mount.paginate(Project, ResponseProject, limit, marker)
+        return self.paginate(Project, ResponseProject, limit, marker)
 
     @Route(route='{project_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsProject)

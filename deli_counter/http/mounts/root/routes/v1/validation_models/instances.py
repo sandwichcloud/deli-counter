@@ -10,6 +10,8 @@ class RequestCreateInstance(Model):
     name = StringType(required=True, min_length=3)
     image_id = UUIDType(required=True)
     network_id = UUIDType(required=True)
+    region_id = UUIDType(required=True)
+    zone_id = UUIDType()
     public_keys = ListType(UUIDType, default=list)
     tags = DictType(StringType)
 
@@ -19,6 +21,8 @@ class ResponseInstance(Model):
     name = StringType(required=True, min_length=3)
     image_id = UUIDType(required=True)
     network_port_id = UUIDType(required=True)
+    region_id = UUIDType(required=True)
+    zone_id = UUIDType()
     public_keys = ListType(UUIDType, default=list)
     state = EnumType(InstanceState, required=True)
     tags = DictType(StringType, default=dict)
@@ -36,6 +40,10 @@ class ResponseInstance(Model):
         instance_model.state = instance.state
         instance_model.tags = instance.tags
 
+        instance_model.region_id = instance.region_id
+        if instance.zone_id is not None:
+            instance_model.zone_id = instance.zone_id
+
         instance_model.created_at = instance.created_at
         instance_model.updated_at = instance.updated_at
 
@@ -48,6 +56,8 @@ class ParamsInstance(Model):
 
 class ParamsListInstance(Model):
     image_id = UUIDType()
+    zone_id = UUIDType()
+    region_id = UUIDType()
     limit = IntType(default=100, max_value=100, min_value=1)
     marker = UUIDType()
 
