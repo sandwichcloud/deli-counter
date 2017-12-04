@@ -14,12 +14,6 @@ class ParamsListPolicy(Model):
     marker = UUIDType()
 
 
-class RequestCreatePolicy(Model):
-    name = StringType(required=True, min_length=3)
-    rule = StringType(required=True)
-    description = StringType()
-
-
 class RequestUpdatePolicy(Model):
     rule = StringType(required=True)
 
@@ -27,7 +21,6 @@ class RequestUpdatePolicy(Model):
 class ResponsePolicy(Model):
     id = UUIDType(required=True)
     name = StringType(required=True)
-    rule = StringType(required=True)
     description = StringType()
     created_at = ArrowType(required=True)
     updated_at = ArrowType(required=True)
@@ -37,7 +30,6 @@ class ResponsePolicy(Model):
         policy_model = cls()
         policy_model.id = policy.id
         policy_model.name = policy.name
-        policy_model.rule = policy.rule
         policy_model.description = policy.description
         if policy_model.description is None:
             policy_model.description = ""

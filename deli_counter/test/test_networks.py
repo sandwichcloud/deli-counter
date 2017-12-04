@@ -51,7 +51,7 @@ class TestNetwork(DeliTestCase):
         assert resp.json['message'] == 'A network with the requested port group already exists.'
 
     def test_get(self, wsgi, app):
-        token = self.create_token(app)
+        token = self.create_token(app, roles=["viewer"])
         network = self.create_network(app)
 
         # Test invalid
@@ -64,7 +64,7 @@ class TestNetwork(DeliTestCase):
         assert resp.json == ResponseNetwork.from_database(network).to_primitive()
 
     def test_list(self, wsgi, app):
-        token = self.create_token(app)
+        token = self.create_token(app, roles=["viewer"])
 
         # Test List
         resp = self.get(wsgi, "/v1/networks", token=token)

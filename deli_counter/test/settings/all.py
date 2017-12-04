@@ -75,6 +75,8 @@ AUTH_DRIVERS = [
     'deli_counter.auth.drivers.github.driver:GithubAuthDriver'
 ]
 
+AUTH_FERNET_KEYS = ["xVc2Y7UeZWmNVVYZUwh35w2J8V69kkn60EDr6TdAQoc="]
+
 ####################
 # GITHUB AUTH      #
 ####################

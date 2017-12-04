@@ -99,15 +99,13 @@ RABBITMQ_PASSWORD = os.environ['RABBITMQ_PASSWORD']
 # Auth             #
 ####################
 
-# TODO: default to db driver
-AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', "").split(",")
-# AUTH_DRIVERS.append("deli_counter.auth_drivers.db.driver:DBAuthDriver")
+AUTH_DRIVERS = os.environ.get('AUTH_DRIVERS', "deli_counter.auth_drivers.db.driver:DBAuthDriver").split(",")
+AUTH_FERNET_KEYS = os.environ['AUTH_FERNET_KEYS'].split(",")
 
 ####################
-# DB AUTH          #
+# BUiltIn AUTH     #
 ####################
-# TODO: implement
-# Does DB auth need any params?
+# Does builtin auth need any params?
 
 ####################
 # GITHUB AUTH      #

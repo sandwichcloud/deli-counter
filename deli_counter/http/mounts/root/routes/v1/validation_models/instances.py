@@ -9,6 +9,7 @@ from ingredients_http.schematics.types import ArrowType, EnumType
 class RequestCreateInstance(Model):
     name = StringType(required=True, min_length=3)
     image_id = UUIDType(required=True)
+    service_account_id = UUIDType()
     network_id = UUIDType(required=True)
     region_id = UUIDType(required=True)
     zone_id = UUIDType()

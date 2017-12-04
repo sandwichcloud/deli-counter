@@ -10,7 +10,7 @@ WORKDIR /usr/src/app
 # Install build time dependencies for uwsgi
 # Install uwsgi and dumb-init
 RUN apk --no-cache add --virtual build-deps \
-    build-base bash linux-headers pcre-dev postgresql-dev && \
+    build-base bash linux-headers pcre-dev postgresql-dev libffi-dev && \
     pip install uwsgi dumb-init
 
 # COPY tar.gz from build container
@@ -24,7 +24,7 @@ COPY wsgi.ini wsgi.ini
 # Remove build time dependencies
 # Install runtime dependencies
 RUN apk del build-deps && \
-    apk --no-cache add openssl pcre libpq ca-certificates
+    apk --no-cache add openssl pcre libpq libffi ca-certificates
 
 # add entrypoint
 COPY docker-entrypoint.sh /bin/docker-entrypoint.sh

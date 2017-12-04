@@ -1,9 +1,12 @@
+import json
 import logging
-import secrets
 from abc import ABCMeta, abstractmethod
 from typing import Dict
 
-from ingredients_db.models.authn import AuthNUser, AuthNToken, AuthNTokenRole
+from cryptography.fernet import Fernet
+from simple_settings import settings
+
+from ingredients_db.models.authn import AuthNUser
 from ingredients_db.models.authz import AuthZRole
 from ingredients_http.router import Router
 
@@ -23,7 +26,8 @@ class AuthDriver(object):
     def auth_router(self) -> Router:
         raise NotImplementedError
 
-    def generate_user_token(self, session, username, roles):
+    def generate_user_token(self, session, expires_at, username, global_role_names, project_id=None,
+                            project_role_ids=None):
         user = session.query(AuthNUser).filter(AuthNUser.username == username).filter(
             AuthNUser.driver == self.name).first()
         if user is None:
@@ -32,19 +36,31 @@ class AuthDriver(object):
             user.driver = self.name
             session.add(user)
             session.flush()
+            session.refresh(user)
 
-        token = AuthNToken()
-        token.user_id = user.id
-        token.access_token = secrets.token_urlsafe()
-        session.add(token)
-        session.flush()
+        global_role_ids = []
 
-        for role in roles:
-            db_role = session.query(AuthZRole).filter(AuthZRole.name == role).first()
-            if db_role is not None:
-                token_role = AuthNTokenRole()
-                token_role.token_id = token.id
-                token_role.role_id = db_role.id
-                session.add(token_role)
+        for role_name in global_role_names:
+            role = session.query(AuthZRole).filter(AuthZRole.name == role_name).filter(
+                AuthZRole.project_id == None).first()  # noqa: E711
+            if role is not None:
+                global_role_ids.append(role.id)
 
-        return token
+        fernet = Fernet(settings.AUTH_FERNET_KEYS[0])
+
+        token_data = {
+            'expires_at': expires_at,
+            'user_id': user.id,
+            'roles': {
+                'global': global_role_ids,
+                'project': []
+            }
+        }
+
+        if project_id is not None:
+            token_data['project_id'] = project_id
+            if project_role_ids is None:
+                project_role_ids = []
+            token_data['roles']['project'] = project_role_ids
+
+        return fernet.encrypt(json.dumps(token_data).encode())

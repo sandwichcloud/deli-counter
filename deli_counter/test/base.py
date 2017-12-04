@@ -1,13 +1,15 @@
 import ipaddress
-import secrets
+import json
 
+import arrow
 import webtest
+from cryptography.fernet import Fernet
 from faker import Faker
 
 from deli_counter.http.app import Application
 from deli_counter.http.mounts.root.mount import RootMount
-from ingredients_db.models.authn import AuthNUser, AuthNToken, AuthNTokenRole
-from ingredients_db.models.authz import AuthZPolicy, AuthZRole
+from ingredients_db.models.authn import AuthNUser, AuthNServiceAccount
+from ingredients_db.models.authz import AuthZPolicy, AuthZRole, AuthZRolePolicy
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
 from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
@@ -43,34 +45,39 @@ class DeliTestCase(APITestCase):
 
         return user
 
-    def create_token(self, app, roles=None, authn_user=None, project=None) -> AuthNToken:
+    def create_token(self, app, roles=None, authn_user=None, project=None):
         if roles is None:
             roles = []
         if authn_user is None:
             authn_user = self.create_authn_user(app)
 
         with app.database.session() as session:
-            token = AuthNToken()
-            token.user_id = authn_user.id
-            token.access_token = secrets.token_urlsafe()
-            if project is not None:
-                token.project_id = project.id
-
-            session.add(token)
-            session.flush()
-
+            global_role_ids = []
             for role_name in roles:
-                role = session.query(AuthZRole).filter(AuthZRole.name == role_name).one()
-                token_role = AuthNTokenRole()
-                token_role.token_id = token.id
-                token_role.role_id = role.id
-                session.add(token_role)
+                role = session.query(AuthZRole).filter(AuthZRole.name == role_name).filter(
+                    AuthZRole.project_id == None).first()  # noqa: E711
+                if role is not None:
+                    global_role_ids.append(role.id)
 
-            session.commit()
-            session.refresh(token)
-            session.expunge(token)
+            from simple_settings import settings
+            fernet = Fernet(settings.AUTH_FERNET_KEYS[0])
 
-        return token
+            token_data = {
+                'expires_at': arrow.now().shift(days=+1),
+                'user_id': authn_user.id,
+                'roles': {
+                    'global': global_role_ids,
+                    'project': []
+                }
+            }
+
+            if project is not None:
+                token_data['project_id'] = project.id
+                project_member_role = session.query(AuthZRole).filter(AuthZRole.name == "default_member").filter(
+                    AuthZRole.project_id == project.id).first()
+                token_data['roles']['project'] = [str(project_member_role.id)]
+
+            return fernet.encrypt(json.dumps(token_data).encode()).decode()
 
     def create_policy(self, app, rule, name=None) -> AuthZPolicy:
         with app.database.session() as session:
@@ -104,6 +111,46 @@ class DeliTestCase(APITestCase):
             project.state = ProjectState.CREATED
 
             session.add(project)
+            session.flush()
+            session.refresh(project)
+
+            # Create the default member role
+            member_role = AuthZRole()
+            member_role.name = "default_member"
+            member_role.description = "Default role for project members"
+            member_role.project_id = project.id
+            session.add(member_role)
+            session.flush()
+            session.refresh(member_role)
+            member_policies = session.query(AuthZPolicy).filter(AuthZPolicy.tags.any("project_member"))
+            for policy in member_policies:
+                mr_policy = AuthZRolePolicy()
+                mr_policy.role_id = member_role.id
+                mr_policy.policy_id = policy.id
+                session.add(mr_policy)
+
+            # Create the default service account role
+            sa_role = AuthZRole()
+            sa_role.name = "default_service_account"
+            sa_role.description = "Default role for project service accounts"
+            sa_role.project_id = project.id
+            session.add(sa_role)
+            session.flush()
+            session.refresh(sa_role)
+            sa_policies = session.query(AuthZPolicy).filter(AuthZPolicy.tags.any("service_account"))
+            for policy in sa_policies:
+                sa_policy = AuthZRolePolicy()
+                sa_policy.role_id = sa_role.id
+                sa_policy.policy_id = policy.id
+                session.add(sa_policy)
+
+            # Create the default service account
+            sa = AuthNServiceAccount()
+            sa.name = "default"
+            sa.project_id = project.id
+            sa.role_id = sa_role.id
+            session.add(sa)
+
             session.commit()
             session.refresh(project)
             session.expunge(project)
@@ -231,6 +278,12 @@ class DeliTestCase(APITestCase):
 
             instance.state = InstanceState.ACTIVE
 
+            service_account = session.query(AuthNServiceAccount).filter(
+                AuthNServiceAccount.project_id == project.id).filter(
+                AuthNServiceAccount.name == "default").first()
+
+            instance.service_account_id = service_account.id
+
             session.add(instance)
             session.commit()
             session.refresh(instance)
@@ -242,7 +295,7 @@ class DeliTestCase(APITestCase):
         if headers is None:
             headers = {}
         if token is not None:
-            headers['Authorization'] = 'Bearer ' + token.access_token
+            headers['Authorization'] = 'Bearer ' + token
 
         return wsgi.get(url=uri, headers=headers, **kwargs)
 
@@ -250,7 +303,7 @@ class DeliTestCase(APITestCase):
         if headers is None:
             headers = {}
         if token is not None:
-            headers['Authorization'] = 'Bearer ' + token.access_token
+            headers['Authorization'] = 'Bearer ' + token
 
         return wsgi.post_json(url=uri, headers=headers, params=body, **kwargs)
 
@@ -258,7 +311,7 @@ class DeliTestCase(APITestCase):
         if headers is None:
             headers = {}
         if token is not None:
-            headers['Authorization'] = 'Bearer ' + token.access_token
+            headers['Authorization'] = 'Bearer ' + token
 
         return wsgi.put_json(url=uri, headers=headers, params=body, **kwargs)
 
@@ -266,6 +319,6 @@ class DeliTestCase(APITestCase):
         if headers is None:
             headers = {}
         if token is not None:
-            headers['Authorization'] = 'Bearer ' + token.access_token
+            headers['Authorization'] = 'Bearer ' + token
 
         return wsgi.delete(url=uri, headers=headers, **kwargs)
