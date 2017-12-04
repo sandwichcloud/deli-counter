@@ -61,8 +61,6 @@ class ResponseNetwork(Model):
     created_at = ArrowType(required=True)
     updated_at = ArrowType(required=True)
 
-    # Do we need the custom validations? This isn't user input so maybe not?
-
     @classmethod
     def from_database(cls, network: Network):
         network_model = cls()

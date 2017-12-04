@@ -7,6 +7,7 @@ from deli_counter.http.mounts.root.routes.v1.validation_models.images import Res
 from deli_counter.http.mounts.root.routes.v1.validation_models.instances import RequestCreateInstance, \
     ResponseInstance, ParamsInstance, ParamsListInstance, RequestInstanceImage, RequestInstancePowerOffRestart, \
     RequestInstanceResetState
+from ingredients_db.models.authn import AuthNServiceAccount
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
 from ingredients_db.models.instance import Instance, InstanceState
 from ingredients_db.models.network import Network, NetworkState
@@ -75,6 +76,19 @@ class InstanceRouter(Router):
                     # Image is public so don't error
                     pass
 
+            if request.service_account_id is not None:
+                service_account: AuthNServiceAccount = session.query(AuthNServiceAccount).filter(
+                    AuthNServiceAccount.id == request.service_account_id).first()
+                if service_account is None:
+                    raise cherrypy.HTTPError(404, "A service account with the requested id does not exist.")
+                if service_account.project_id != project.id:
+                    raise cherrypy.HTTPError(400,
+                                             "The requested service account does not belong to the scoped project.")
+            else:
+                service_account = session.query(AuthNServiceAccount).filter(
+                    AuthNServiceAccount.project_id == project.id).filter(
+                    AuthNServiceAccount.name == "default").first()
+
             network = session.query(Network).filter(Network.id == request.network_id).filter(
                 Network.region_id == region.id).first()
             if network is None:
@@ -110,6 +124,7 @@ class InstanceRouter(Router):
             instance.project_id = project.id
             instance.network_port_id = network_port.id
             instance.tags = request.tags
+            instance.service_account_id = service_account.id
 
             instance.region_id = region.id
             if zone is not None:

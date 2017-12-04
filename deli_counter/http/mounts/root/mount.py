@@ -1,9 +1,12 @@
+import json
+
 import arrow
 import cherrypy
+from cryptography.fernet import Fernet, MultiFernet, InvalidToken
 from simple_settings import settings
 
 from deli_counter.auth.manager import AuthManager
-from ingredients_db.models.authn import AuthNToken, AuthNUser
+from ingredients_db.models.authn import AuthNUser, AuthNServiceAccount
 from ingredients_db.models.project import Project
 from ingredients_http.app import HTTPApplication
 from ingredients_http.app_mount import ApplicationMount
@@ -23,35 +26,51 @@ class RootMount(ApplicationMount):
         if authorization_header is None:
             raise cherrypy.HTTPError(400, 'Missing Authorization header.')
 
-        method, token, *_ = authorization_header.split(" ")
+        method, fernet_token, *_ = authorization_header.split(" ")
 
         if method != 'Bearer':
             raise cherrypy.HTTPError(400, 'Only Bearer tokens are allowed.')
 
+        fernets = []
+        for key in settings.AUTH_FERNET_KEYS:
+            self.logger.info("FK: " + key)
+            fernets.append(Fernet(key))
+        fernet = MultiFernet(fernets)
+
+        try:
+            token_data_bytes = fernet.decrypt(fernet_token.encode())
+        except InvalidToken:
+            raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
+
+        token_json = json.loads(token_data_bytes.decode())
+
+        expires_at = arrow.get(token_json['expires_at'])
+
+        if expires_at <= arrow.now():
+            # Token is expired so it is invalid
+            raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
+
+        cherrypy.request.token = {
+            'roles': token_json['roles']
+        }
+
         with cherrypy.request.db_session() as session:
-            token: AuthNToken = session.query(AuthNToken).filter(AuthNToken.access_token == token).first()
-
-            # Token DNE
-            if token is None:
+            if 'service_account_id' in token_json:
+                user = session.query(AuthNServiceAccount).filter(
+                    AuthNServiceAccount.id == token_json['service_account_id']).first()
+            else:
+                user = session.query(AuthNUser).filter(AuthNUser.id == token_json['user_id']).first()
+            if user is None:
                 raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
-
-            # Token is expired so delete the token
-            if token.expires_at < arrow.now():
-                session.delete(token)
-                session.commit()
-                raise cherrypy.HTTPError(401, 'Invalid Authorization Token.')
-
-            project = session.query(Project).filter(Project.id == token.project_id).first()
-
-            user = session.query(AuthNUser).filter(AuthNUser.id == token.user_id).first()
-
-            session.expunge(token)
             session.expunge(user)
-            if project is not None:
-                session.expunge(project)
-            cherrypy.request.token = token
             cherrypy.request.user = user
-            cherrypy.request.project = project
+
+            cherrypy.request.project = None
+            if 'project_id' in token_json:
+                project = session.query(Project).filter(Project.id == token_json['project_id']).first()
+                if project is not None:
+                    cherrypy.request.project = project
+                    session.expunge(project)
 
     def validate_project_scope(self):
         if cherrypy.request.project is None:
@@ -60,8 +79,7 @@ class RootMount(ApplicationMount):
     def enforce_policy(self, policy_name, resource_object=None):
         resource_object = getattr(cherrypy.request, "resource_object", resource_object)
         with cherrypy.request.db_session() as session:
-            self.auth_manager.enforce_policy(policy_name, session, cherrypy.request.token, cherrypy.request.user,
-                                             cherrypy.request.project, resource_object)
+            self.auth_manager.enforce_policy(policy_name, session, cherrypy.request.token, cherrypy.request.project)
 
     def resource_object(self, id_param, cls):
         resource_id = cherrypy.request.params[id_param]
@@ -70,6 +88,10 @@ class RootMount(ApplicationMount):
             if resource is None:
                 raise cherrypy.HTTPError(404, "The resource could not be found.")
 
+            if hasattr(resource, "project_id") and cherrypy.request.project is not None:
+                if resource.project_id != cherrypy.request.project.id:
+                    raise cherrypy.HTTPError(403, "Requested resource is not in the scoped project.")
+
             session.expunge(resource)
             cherrypy.request.resource_object = resource
 
@@ -77,14 +99,12 @@ class RootMount(ApplicationMount):
         cherrypy.tools.authentication = cherrypy.Tool('on_start_resource', self.validate_token, priority=20)
         cherrypy.tools.project_scope = cherrypy.Tool('on_start_resource', self.validate_project_scope, priority=30)
 
-        cherrypy.tools.resource_object = cherrypy.Tool('before_request_body', self.resource_object, priority=30)
-        cherrypy.tools.enforce_policy = cherrypy.Tool('before_request_body', self.enforce_policy, priority=40)
+        cherrypy.tools.resource_object = cherrypy.Tool('before_request_body', self.resource_object, priority=40)
+        cherrypy.tools.enforce_policy = cherrypy.Tool('before_request_body', self.enforce_policy, priority=50)
 
     def __setup_auth(self):
         self.auth_manager = AuthManager()
         self.auth_manager.load_drivers()
-        with self.app.database.session() as session:
-            self.auth_manager.load_policies(session)
 
     def __setup_messaging(self):
         self.messaging = Messaging(settings.RABBITMQ_HOST, settings.RABBITMQ_PORT, settings.RABBITMQ_USERNAME,

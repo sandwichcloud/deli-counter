@@ -1,3 +1,4 @@
+import arrow
 import cherrypy
 import github
 import github.AuthenticatedUser
@@ -8,7 +9,7 @@ from simple_settings import settings
 from sqlalchemy_utils.types.json import json
 
 from deli_counter.auth.validation_models.github import RequestGithubAuthorization, RequestGithubToken
-from deli_counter.http.mounts.root.routes.v1.auth.z.validation_models.auth import ResponseOAuthToken
+from deli_counter.http.mounts.root.routes.v1.auth.validation_models.tokens import ResponseOAuthToken
 from ingredients_http.request_methods import RequestMethods
 from ingredients_http.route import Route
 from ingredients_http.router import Router
@@ -25,11 +26,15 @@ class GithubAuthRouter(Router):
             raise cherrypy.HTTPError(403, "User not a member of GitHub organization: '" + settings.GITHUB_ORG + "'")
 
         with cherrypy.request.db_session() as session:
-            token = self.driver.generate_user_token(session, github_user.login, self.driver.find_roles(github_user))
+            expiry = arrow.now().shift(days=+1)
+            token = self.driver.generate_user_token(session, expiry, github_user.login,
+                                                    self.driver.find_roles(github_user))
             session.commit()
-            session.refresh(token)
 
-        return ResponseOAuthToken.from_database(token)
+        response = ResponseOAuthToken()
+        response.access_token = token
+        response.expiry = expiry
+        return response
 
     @Route(route='authorization', methods=[RequestMethods.POST])
     @cherrypy.config(**{'tools.authentication.on': False})

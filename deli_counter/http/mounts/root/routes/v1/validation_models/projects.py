@@ -1,5 +1,5 @@
 from schematics import Model
-from schematics.types import UUIDType, StringType, IntType
+from schematics.types import UUIDType, StringType, IntType, BooleanType
 
 from ingredients_db.models.project import Project, ProjectState
 from ingredients_http.schematics.types import ArrowType, EnumType
@@ -14,7 +14,7 @@ class ParamsProject(Model):
 
 
 class ParamsListProject(Model):
-    name = StringType(min_length=3)
+    all = BooleanType(default=False)
     limit = IntType(default=100, max_value=100, min_value=1)
     marker = UUIDType()
 

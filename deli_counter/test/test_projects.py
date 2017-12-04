@@ -31,7 +31,7 @@ class TestProject(DeliTestCase):
         assert resp.json['message'] == 'A project with the requested name already exists.'
 
     def test_get(self, wsgi, app):
-        token = self.create_token(app)
+        token = self.create_token(app, roles=["viewer"])
         project = self.create_project(app)
 
         # Test invalid
@@ -44,7 +44,7 @@ class TestProject(DeliTestCase):
         assert resp.json == ResponseProject.from_database(project).to_primitive()
 
     def test_list(self, wsgi, app):
-        token = self.create_token(app)
+        token = self.create_token(app, roles=["viewer"])
 
         # Test List
         resp = self.get(wsgi, "/v1/projects", token=token)

@@ -22,7 +22,9 @@ class AuthRouter(Router):
     @cherrypy.config(**{'tools.authentication.on': False})
     @cherrypy.tools.json_out()
     def discover(self):
-        data = {}
+        data = {
+            "default": list(self.drivers.keys())[0]
+        }
 
         for _, driver in self.drivers.items():
             data[driver.name] = driver.discover_options()

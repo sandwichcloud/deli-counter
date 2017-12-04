@@ -3,6 +3,7 @@ from simple_settings import settings
 
 from deli_counter.cli.commands.database.current import CurrentCommand
 from deli_counter.cli.commands.database.downgrade import DowngradeCommand
+from deli_counter.cli.commands.database.gen_admin import GenAdminCommand
 from deli_counter.cli.commands.database.history import HistoryCommand
 from deli_counter.cli.commands.database.revision import RevisionCommand
 from deli_counter.cli.commands.database.upgrade import UpgradeCommand
@@ -23,6 +24,7 @@ class DatabaseCommand(Command):
         DowngradeCommand().register_subcommand(self)
         HistoryCommand().register_subcommand(self)
         RevisionCommand().register_subcommand(self)
+        GenAdminCommand().register_subcommand(self)
 
     def setup(self, args):
         self.database = Database(settings.DATABASE_HOST, settings.DATABASE_PORT, settings.DATABASE_USERNAME,

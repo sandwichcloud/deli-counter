@@ -3,7 +3,7 @@ pbr==3.1.1 # Apache 2.0
 python-dotenv==0.7.1 # BSD 3-clause
 requests==2.18.4 # Apache 2.0
 PyGithub==1.35 # LGPL
-oslo.policy==1.28.1 # Apache 2.0
+cryptography==2.1.3 # Apache 2.0 or BSD
 ingredients.http==0.0.12 # MIT
 ingredients.tasks==0.0.7 # MIT
-ingredients.db==0.0.9 # MIT
+ingredients.db==0.0.10 # MIT
