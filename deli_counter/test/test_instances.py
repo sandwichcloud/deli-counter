@@ -53,7 +53,9 @@ class TestInstance(DeliTestCase):
         resp = self.get(wsgi, '/v1/instances/%s' % instance.id, token=token)
         resp_model = ResponseInstance(resp.json)
         assert resp.json == resp_model.to_primitive()
-        assert resp.json == ResponseInstance.from_database(instance).to_primitive()
+        with app.database.session() as session:
+            instance = session.merge(instance, load=False)
+            assert resp.json == ResponseInstance.from_database(instance).to_primitive()
 
     def test_list(self, wsgi, app):
         project = self.create_project(app)
