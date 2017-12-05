@@ -1,4 +1,5 @@
 import cherrypy
+from sqlalchemy.orm import Query
 
 from deli_counter.http.mounts.root.routes.v1.validation_models.regions import ResponseRegion, RequestCreateRegion, \
     ParamsRegion, ParamsListRegion, RequestRegionSchedule
@@ -58,8 +59,11 @@ class RegionsRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsListRegion)
     @cherrypy.tools.model_out_pagination(cls=ResponseRegion)
     @cherrypy.tools.enforce_policy(policy_name="regions:list")
-    def list(self, limit, marker):
-        return self.paginate(Region, ResponseRegion, limit, marker)
+    def list(self, name, limit, marker):
+        starting_query = None
+        if name is not None:
+            starting_query = Query(Region).filter(Region.name == name)
+        return self.paginate(Region, ResponseRegion, limit, marker, starting_query=starting_query)
 
     @Route(route='{region_id}', methods=[RequestMethods.DELETE])
     @cherrypy.tools.model_params(cls=ParamsRegion)

@@ -10,9 +10,9 @@ from deli_counter.http.mounts.root.routes.v1.validation_models.instances import 
 from ingredients_db.models.authn import AuthNServiceAccount
 from ingredients_db.models.images import Image, ImageVisibility, ImageState
 from ingredients_db.models.instance import Instance, InstanceState
+from ingredients_db.models.keypair import Keypair
 from ingredients_db.models.network import Network, NetworkState
 from ingredients_db.models.network_port import NetworkPort
-from ingredients_db.models.public_key import PublicKey
 from ingredients_db.models.region import Region, RegionState
 from ingredients_db.models.task import Task
 from ingredients_db.models.zones import Zone, ZoneState
@@ -115,6 +115,7 @@ class InstanceRouter(Router):
 
             network_port = NetworkPort()
             network_port.network_id = network.id
+            network_port.project_id = project.id
             session.add(network_port)
             session.flush()
 
@@ -133,16 +134,15 @@ class InstanceRouter(Router):
             session.add(instance)
             session.flush()
 
-            for public_key_id in request.public_keys:
-                public_key = session.query(PublicKey).filter(PublicKey.id == public_key_id).filter(
-                    PublicKey.project_id == project.id).first()
+            for keypair_id in request.keypair_ids:
+                keypair = session.query(Keypair).filter(Keypair.id == keypair_id).filter(
+                    Keypair.project_id == project.id).first()
 
-                if public_key is None:
-                    raise cherrypy.HTTPError(404,
-                                             "Could not find a public key within the scoped project with the id %s" %
-                                             public_key_id)
+                if keypair is None:
+                    raise cherrypy.HTTPError(404, "Could not find a keypair within the scoped project with the id %s" %
+                                             keypair_id)
 
-                instance.public_keys.append(public_key)
+                instance.keypairs.append(keypair)
 
             print("TASK")
             create_task(session, instance, create_instance, instance_id=instance.id)
@@ -159,7 +159,9 @@ class InstanceRouter(Router):
     @cherrypy.tools.resource_object(id_param="instance_id", cls=Instance)
     @cherrypy.tools.enforce_policy(policy_name="instances:get")
     def get(self, instance_id: uuid.UUID):
-        return ResponseInstance.from_database(cherrypy.request.resource_object)
+        with cherrypy.request.db_session() as session:
+            instance: Instance = session.merge(cherrypy.request.resource_object, load=False)
+            return ResponseInstance.from_database(instance)
 
     @Route()
     @cherrypy.tools.project_scope()

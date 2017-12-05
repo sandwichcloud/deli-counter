@@ -13,7 +13,7 @@ class RequestCreateInstance(Model):
     network_id = UUIDType(required=True)
     region_id = UUIDType(required=True)
     zone_id = UUIDType()
-    public_keys = ListType(UUIDType, default=list)
+    keypair_ids = ListType(UUIDType, default=list)
     tags = DictType(StringType)
 
 
@@ -24,7 +24,8 @@ class ResponseInstance(Model):
     network_port_id = UUIDType(required=True)
     region_id = UUIDType(required=True)
     zone_id = UUIDType()
-    public_keys = ListType(UUIDType, default=list)
+    service_account_id = UUIDType()
+    keypair_ids = ListType(UUIDType, default=list)
     state = EnumType(InstanceState, required=True)
     tags = DictType(StringType, default=dict)
 
@@ -40,10 +41,14 @@ class ResponseInstance(Model):
         instance_model.network_port_id = instance.network_port_id
         instance_model.state = instance.state
         instance_model.tags = instance.tags
+        instance_model.service_account_id = instance.service_account_id
 
         instance_model.region_id = instance.region_id
         if instance.zone_id is not None:
             instance_model.zone_id = instance.zone_id
+
+        for keypair in instance.keypairs:
+            instance_model.keypair_ids.append(keypair.id)
 
         instance_model.created_at = instance.created_at
         instance_model.updated_at = instance.updated_at
@@ -70,8 +75,7 @@ class RequestInstanceImage(Model):
 
 class RequestInstancePowerOffRestart(Model):
     hard = BooleanType(default=False)
-    timeout = IntType(default=60, min_value=60,
-                      max_value=300)  # If your vm takes more than 5 minutes to power off you are doing something bad
+    timeout = IntType(default=60, min_value=60, max_value=300)
 
 
 class RequestInstanceResetState(Model):
