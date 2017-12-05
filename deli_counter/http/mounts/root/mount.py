@@ -99,8 +99,8 @@ class RootMount(ApplicationMount):
         cherrypy.tools.authentication = cherrypy.Tool('on_start_resource', self.validate_token, priority=20)
         cherrypy.tools.project_scope = cherrypy.Tool('on_start_resource', self.validate_project_scope, priority=30)
 
-        cherrypy.tools.resource_object = cherrypy.Tool('before_request_body', self.resource_object, priority=40)
-        cherrypy.tools.enforce_policy = cherrypy.Tool('before_request_body', self.enforce_policy, priority=50)
+        cherrypy.tools.enforce_policy = cherrypy.Tool('before_request_body', self.enforce_policy, priority=40)
+        cherrypy.tools.resource_object = cherrypy.Tool('before_request_body', self.resource_object, priority=50)
 
     def __setup_auth(self):
         self.auth_manager = AuthManager()

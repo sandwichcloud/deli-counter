@@ -81,7 +81,7 @@ class NetworkRouter(Router):
     @cherrypy.tools.model_params(cls=ParamsListNetwork)
     @cherrypy.tools.model_out_pagination(cls=ResponseNetwork)
     @cherrypy.tools.enforce_policy(policy_name="networks:list")
-    def list(self, region_id, limit: int, marker: uuid.UUID):
+    def list(self, name, region_id, limit: int, marker: uuid.UUID):
         starting_query = Query(Network)
         if region_id is not None:
             with cherrypy.request.db_session() as session:
@@ -89,6 +89,8 @@ class NetworkRouter(Router):
                 if region is None:
                     raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
             starting_query = starting_query.filter(Network.region_id == region.id)
+        if name is not None:
+            starting_query = starting_query.filter(Network.name == name)
         return self.paginate(Network, ResponseNetwork, limit, marker, starting_query=starting_query)
 
     @Route(route='{network_id}', methods=[RequestMethods.DELETE])

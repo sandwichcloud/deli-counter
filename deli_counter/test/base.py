@@ -262,6 +262,7 @@ class DeliTestCase(APITestCase):
 
             network_port = NetworkPort()
             network_port.network_id = network.id
+            network_port.project_id = project.id
             network_port.ip_address = network.next_free_address(session)
 
             session.add(network_port)

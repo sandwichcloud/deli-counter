@@ -117,7 +117,8 @@ class ImageRouter(Router):
                 raise cherrypy.HTTPError(409, "Cannot delete an image while it is locked.")
 
             image.state = ImageState.DELETING
-            create_task(session, image, delete_image, image_id=image.id)
+            # TODO: do we allow not deleting image backing?
+            create_task(session, image, delete_image, image_id=image.id, delete_backing=True)
 
             session.commit()
 
