@@ -194,7 +194,9 @@ class InstanceRouter(Router):
     @cherrypy.tools.resource_object(id_param="instance_id", cls=Instance)
     @cherrypy.tools.enforce_policy(policy_name="instances:delete")
     def delete(self, instance_id: uuid.UUID):
-        cherrypy.response.status = 202
+        cherrypy.response.status = 204
+        # Fix for https://github.com/cherrypy/cherrypy/issues/1657
+        del cherrypy.response.headers['Content-Type']
         with cherrypy.request.db_session() as session:
             instance: Instance = session.merge(cherrypy.request.resource_object, load=False)
 
@@ -302,8 +304,13 @@ class InstanceRouter(Router):
                 raise cherrypy.HTTPError(409, "Can only image an instance in the following state: %s" %
                                          InstanceState.STOPPED.value)
 
-            region = session.query(Region).join(Zone, Region.id == Zone.region_id).filter(
-                Zone.id == instance.zone_id).one()
+            region = session.query(Region).filter(Region.id == instance.region_id).one()
+
+            image = session.query(Image).filter(Image.project_id == instance.project_id).filter(
+                Image.name == request.name).filter(Image.region_id == region.id).first()
+
+            if image is not None:
+                raise cherrypy.HTTPError(409, 'An image with the requested name already exists.')
 
             instance.state = InstanceState.IMAGING
 
@@ -317,12 +324,10 @@ class InstanceRouter(Router):
             session.add(image)
             session.flush()
 
-            # Delete vm without actually deleting the backing
-            create_task(session, instance, delete_instance, instance_id=instance.id, delete_backing=False)
+            # Clone the vm to a template
+            create_task(session, image, convert_vm, image_id=image.id, instance_id=instance.id)
 
-            # Convert the vm to a template
-            create_task(session, image, convert_vm, image_id=image.id, from_instance=True)
-
+            instance.current_task_id = image.current_task_id
             session.commit()
 
             return ResponseImage.from_database(image)

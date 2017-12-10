@@ -33,8 +33,17 @@ class ImageRouter(Router):
         with cherrypy.request.db_session() as session:
             project = cherrypy.request.project
 
+            region = session.query(Region).filter(Region.id == request.region_id).first()
+            if region is None:
+                raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
+
+            if region.state != RegionState.CREATED:
+                raise cherrypy.HTTPError(412,
+                                         "The requested region is not in the following state: %s" %
+                                         RegionState.CREATED.value)
+
             image = session.query(Image).filter(Image.project_id == project.id).filter(
-                Image.name == request.name).first()
+                Image.name == request.name).filter(Image.region_id == region.id).first()
 
             if image is not None:
                 raise cherrypy.HTTPError(409, 'An image with the requested name already exists.')
@@ -44,15 +53,6 @@ class ImageRouter(Router):
 
             if image is not None:
                 raise cherrypy.HTTPError(409, 'An image with the requested file already exists.')
-
-            region = session.query(Region).filter(Region.id == request.region_id).first()
-            if region is None:
-                raise cherrypy.HTTPError(404, "A region with the requested id does not exist.")
-
-            if region.state != RegionState.CREATED:
-                raise cherrypy.HTTPError(412,
-                                         "The requested region is not in the following state: %s" %
-                                         RegionState.CREATED.value)
 
             image = Image()
             image.name = request.name
@@ -105,7 +105,9 @@ class ImageRouter(Router):
     @cherrypy.tools.resource_object(id_param="image_id", cls=Image)
     @cherrypy.tools.enforce_policy(policy_name="images:delete")
     def delete(self, image_id):
-        cherrypy.response.status = 202
+        cherrypy.response.status = 204
+        # Fix for https://github.com/cherrypy/cherrypy/issues/1657
+        del cherrypy.response.headers['Content-Type']
         with cherrypy.request.db_session() as session:
             image: Image = session.merge(cherrypy.request.resource_object, load=False)
 
