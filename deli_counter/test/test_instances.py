@@ -82,7 +82,7 @@ class TestInstance(DeliTestCase):
         # Test correct
         with patch('ingredients_tasks.tasks.instance.delete_instance.apply_async') as apply_async_mock:
             apply_async_mock.return_value = None
-            self.delete(wsgi, "/v1/instances/%s" % instance.id, token=token, status=202)
+            self.delete(wsgi, "/v1/instances/%s" % instance.id, token=token, status=204)
         # Check to make sure it's in deleting state
         with app.database.session() as session:
             image = session.query(Instance).filter(Instance.id == instance.id).first()
