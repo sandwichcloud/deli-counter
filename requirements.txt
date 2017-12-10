@@ -5,5 +5,5 @@ requests==2.18.4 # Apache 2.0
 PyGithub==1.35 # LGPL
 cryptography==2.1.4 # Apache 2.0 or BSD
 ingredients.http==0.0.12 # MIT
-ingredients.tasks==0.0.8 # MIT
+ingredients.tasks==0.0.9 # MIT
 ingredients.db==0.0.11 # MIT

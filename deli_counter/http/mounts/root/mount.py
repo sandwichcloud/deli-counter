@@ -33,7 +33,6 @@ class RootMount(ApplicationMount):
 
         fernets = []
         for key in settings.AUTH_FERNET_KEYS:
-            self.logger.info("FK: " + key)
             fernets.append(Fernet(key))
         fernet = MultiFernet(fernets)
 
